@@ -180,7 +180,30 @@ library(tidyverse)
 
 ##Selecting predictor variables for in hostital death
 
-SAPS1 and SOFA seem like obvious choices, as these have been developed as predictors of clinical outcomes (SOFA) and risk of death (SAPS-I).  Age should also be included, as those who are very young or very old will likely have a higher risk of death.  SOFA includes scores for 
+SAPS1 and SOFA seem like obvious choices, as these have been developed as predictors of clinical outcomes (SOFA) and risk of death (SAPS-I).  
+
+Age should also be included, as those who are very young or very old will likely have a higher risk of death.
+
+Include variables from SAPS-I as this has already been verified to correlate with increased risk of death (BUN, GCS, HCO3, HCT, HR, K, Na, RespRate, SysABP, Urine, WBC). Similarly for SOPS (PaO2, Platelets, Bilirubin, Creatinine, GCS).
+
+
+
+
+```{r, EDA}
+#plot distribution of SAPS1 and SOFA by survival
+icu_patients_df1 %>% select(in_hospital_death, SOFA, SAPS1) %>%
+  gather(key = "variable", value = "level", SOFA:SAPS1) %>%
+  ggplot(aes(x=level)) + geom_histogram() + 
+  facet_grid(in_hospital_death ~ variable, scales = "free")
+
+icu_patients_df1 %>% select(in_hospital_death, SOFA, SAPS1) %>%
+  gather(key = "variable", value = "level", SOFA:SAPS1) %>%
+  ggplot(aes(x=level, fill = factor(in_hospital_death))) +
+  geom_histogram(position = "stack", binwidth = 1) +
+  facet_grid(. ~ variable, scales = "free")
+
+```
+
 
 # Task 2 (15 marks)
 
