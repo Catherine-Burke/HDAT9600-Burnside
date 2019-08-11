@@ -298,7 +298,6 @@ In this task, you are required to develop a Cox proportional hazards survival mo
 ####
 **Create your response to this task here, as a mixture of embedded (`knitr`) R code and any resulting outputs, and explanatory or commentary text.** 
 
-
 ```{r data-setup}
 library(survival)
 ```
@@ -414,6 +413,17 @@ hd_fitbyGender2 <- coxph( Surv(Days,Status) ~ Gender, data = hospitaldeath)
 summary(hd_fitbyGender2)
 ```
 The non-significant log-rank test of equality of the survival function means that the null hypothesis cannot be rejected, and there is no significant difference between groups. The variables with non-significant log-rank test are ICUType (p-value = 0.4) and Gender (p-value = 0.8).
+
+
+
+
+
+## Yalin
+I am a little confused about how to choose predictor variables for the model, but I found ranger function can be used to find the most important variable, don't know if it works
+
+
+
+
 
 ```{r Taks2_Part2.c}
 fitbyall <- coxph( Surv(Days,Status) ~ . , data = hospitaldeath) 
