@@ -177,7 +177,70 @@ In this task, you are required to develop a logistic regression model using the 
 ```{r - setup for task1}
 library(tidyverse)
 ```
+##Jason
+##Consideration for variables
+_Need to be discerning when selecting variables. Some variables need cleaning (eg 523 values in Bilirubin variables have a min greater then the max). Some variables are missing a lot of data. If we select too many variables with missing data there will be overlap leading to even more loss in our data for analysis. _
+#I would be interested to hear people's thoughts on whether we should use the "diff" variables vs running the values as quadratic term "I(x^2)" instead. I suppose the advantage of "diff" is it is supposed to be the most deranged from the mean in either direction whereas the quadratic term would give us a "U" shaped relationship as opposed to a linear one.
+##Assessable outcome: "in_hospital_death"
+_Demographics: "Weight_diff", "Weight_max", "Weight_min", "Age", "Days", "Gender", "Height", "ICUType", "Length_of_stay"_
+_Age and sex are demographics important for identifying confounders. Height is missing a lot of values. Is length of stay a predictor or an outcome? Suggest outcome, remove.  Weight can be bad for overweight and underweight._
+##Selected Variables: "Weight_diff", "Age", "Gender", "ICUType "
 
+_CNS: "GCS_diff", "GCS_max", "GCS_min", "Na_diff", "Na_max", "Na_min"_
+_Suggest GCS_max (if your best GCS is low, it’s worse than if your worst GCS is low) and Na_diff (high and low sodium are bad)_
+##Selected Variables: "GCS_max", "Na_diff"
+
+_CVS: "DiasABP_diff", "DiasABP_max", "DiasABP_min", "HR_diff",  "HR_max", "HR_min", "K_diff", "K_max", "K_min", "Mg_diff", "Mg_max", "Mg_min", "NIDiasABP_diff", "NIDiasABP_max", "NIDiasABP_min", "NIMAP_diff", "NIMAP_max", "NIMAP_min", "NISysABP_diff", "NISysABP_max", "NISysABP_min", "SysABP_diff", "SysABP_max", "SysABP_min", "Temp_diff", "Temp_max", "Temp_min", "TroponinI_diff", "TroponinI_max", "TroponinI_min", "TroponinT_diff", "TroponinT_max", "TroponinT_min", "MAP_diff", "MAP_max",  "MAP_min"_
+_The blood pressure variables have a lot of missing data except MAP. Suggest MAP_max as a low MAP isn’t as bad as a high MAP (unless really high). It’s unclear to me if either of the troponins are worth exploring, they’re a marker for AMI but there’s likely only a small proportion of admissions this would be abnormal in. Temp is bad if high or low. Unsure about usefulness of including electrolytes (K, Mg)._
+##Selected Variables: "MAP_max", "Temp_diff", "HR_diff"
+
+_PULMONARY: "FiO2_diff", "FiO2_max", "FiO2_min", "PaCO2_diff", "PaCO2_max", "PaCO2_min", "PaO2_diff", "PaO2_max", "PaO2_min", "RespRate_diff", "RespRate_max", "RespRate_min", "SaO2_diff", "SaO2_max", "SaO2_min"_
+_PaO2 can be bad if low, usually doesn’t matter if high. PaCO2 can be bad low and high. Respiratory rate bad if low or high. SaO2 just a different measure of arterial oxygenation. FiO2 could be considered for interaction with PaO2 but as the values aren’t linked that would likely be pointless, leave out._
+##Selected Variables: "PaO2_max", "PaCO2_diff", "RespRate_diff"
+
+_RENAL: "BUN_diff", "BUN_max", "BUN_min", "Creatinine_diff", "Creatinine_max", "Creatinine_min", "Urine_diff", "Urine_max", "Urine_min"_
+_All values are good markers of acute kidney injury or chronic kidney disease which both have a higher than average mortality rate._
+##Selected Variables: "Urine_max", "Creatinine_min", "BUN_min"
+
+_LIVER: "Albumin_diff", "Albumin_max", "Albumin_min", "ALP_diff", "ALP_max", "ALP_min", "ALT_diff", "ALT_max", "ALT_min", "AST_diff", "AST_max", "AST_min", "Bilirubin_diff", "Bilirubin_max", "Bilirubin_min", "Cholesterol_diff", "Cholesterol_max", "Cholesterol_min"_
+_Low albumin is bad. High bilirubin is bad. ALT and ALT are supportive markers for liver failure but this is adequately covered by bilirubin. Cholesterol is bad if it’s low._
+##Selected Variables: "Albumin_max", "Bilirubin_min", "Cholesterol_max"
+
+_METABOLIC/OTHER: "Glucose_diff", "Glucose_max", "Glucose_min", "HCO3_diff", "HCO3_max", "HCO3_min", "Lactate_diff", "Lactate_max", "Lactate_min", "WBC_diff", "WBC_max", "WBC_min", "Platelets_diff", "Platelets_max", "Platelets_min", "pH_diff", "pH_max", "pH_min", "HCT_diff", "HCT_max", "HCT_min"  _
+_Glucose bad if low or high. HCO3 bad if it’s low. High lactate is bad. WBC marker for infection in both directions. Low platelets are bad. pH is bad in both directions. It’s unclear to me if HCT is a marker for mortality._
+##Selected Variables: "Glucose_diff", "HCO3_max", "Lactate_min", "WBC_diff", "Platelets_min", "pH_diff"
+
+_SCORES: "SAPS1", "SOFA"_
+_SAPS1 is an acute physiology score using Age, HR, SBP, Temp, RR, UO, BUN, HCT, WCC, glucose, K, Na, HCO3 and GCS. SOFA score uses GCS, creatinine, bilirubin and MAP. We are already using Age, HR, Temp, RR, UO, BUN, HCT, WCC, glucose, K, Na, HCO3, creatinine, bilirubin, MAP and GCS. SAPS is missing 96 variables, leave out. Keep SOFA._
+##Selected Variables: "SOFA"
+
+
+This code gives proportional views (density histogram, filled barplot) of all variables by outcome of in_hospital_death.
+```{r review of all variables}
+ICUMort <- icu_patients_df1
+require("ggplot2")
+library(ggplot2)
+for (i in names(ICUMort)){
+
+  if(is.numeric(ICUMort[[i]])){
+  
+    print(ggplot(ICUMort, aes(ICUMort[[i]])) +
+          geom_histogram(aes(y = ..density.., fill = factor(in_hospital_death, labels = c("No","Yes"))), alpha = .3, bins = 30, position = "identity") +
+          labs(x=i, fill="Died", title = paste0("Density Plot of ", i,", ", length(na.omit(ICUMort[[i]]))," values available")))
+
+  }else{
+
+    print(ggplot(ICUMort, aes(ICUMort[[i]], fill=factor(in_hospital_death, labels = c("No", "Yes")))) +
+          geom_bar(position = "fill") +
+          labs(x = i, fill = "Died", title = paste0("Bar Plot of ", i,", ",  length(na.omit(ICUMort[[i]])), " values available")))
+  
+  }
+
+}
+```
+
+
+##Cath
 ##Selecting predictor variables for in hostital death
 
 SAPS1 and SOFA seem like obvious choices, as these have been developed as predictors of clinical outcomes (SOFA) and risk of death (SAPS-I).  
@@ -190,13 +253,19 @@ Include variables from SAPS-I as this has already been verified to correlate wit
 
 
 ```{r, EDA}
+#added require and lib statement to make sure appropriate packages loaded, I also had a conflict with the select function 
+require("dplyr","tidyr","ggplot2")
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
 #plot distribution of SAPS1 and SOFA by survival
-icu_patients_df1 %>% select(in_hospital_death, SOFA, SAPS1) %>%
+icu_patients_df1 %>% dplyr::select(in_hospital_death, SOFA, SAPS1) %>%
   gather(key = "variable", value = "level", SOFA:SAPS1) %>%
   ggplot(aes(x=level)) + geom_histogram() + 
   facet_grid(in_hospital_death ~ variable, scales = "free")
 
-icu_patients_df1 %>% select(in_hospital_death, SOFA, SAPS1) %>%
+icu_patients_df1 %>% dplyr::select(in_hospital_death, SOFA, SAPS1) %>%
   gather(key = "variable", value = "level", SOFA:SAPS1) %>%
   ggplot(aes(x=level, fill = factor(in_hospital_death))) +
   geom_histogram(position = "stack", binwidth = 1) +
