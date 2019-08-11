@@ -299,6 +299,234 @@ In this task, you are required to develop a Cox proportional hazards survival mo
 **Create your response to this task here, as a mixture of embedded (`knitr`) R code and any resulting outputs, and explanatory or commentary text.** 
 
 
+```{r data-setup}
+library(survival)
+```
+
+### Task 2 Part1.a
+```{r Taks2_Part1a}
+# load the data
+icu_patients_df0 <- readRDS("icu_patients_df0.rds")
+icu_patients_df1 <- readRDS("icu_patients_df1.rds")
+#View(icu_patients_df1)
+head(icu_patients_df1)
+str(icu_patients_df1)
+summary(icu_patients_df1)
+
+```
+
+### Task 2 Part1.b
+The categorical variables in the dataset that may be associated with a person’s survival are:
+in_hospital_death;
+ICUType;
+Gender.
+
+The continuous variables in the dataset that may be associated with a person’s survival are:
+Length_of_stay;
+SAPS1: the risk of death in ICU patients;
+SOFA: trends in organ dysfunction;
+Survival;
+Age;
+all 3 summary variables for 36 clinical measures.
+
+### Task 2 Part2
+```{r Taks2_Part2.a}
+# Basic exploratory data analysis:
+
+cat("Frequency for the categories of in_hospital_death variable")
+# use table function to calculate frequency
+ihd_table <- table(icu_patients_df1$in_hospital_death)
+# use addmargins function to add total to the table
+addmargins(ihd_table)
+# calculate proportions from the frequency table
+# use round function to keep 2 decimal digit
+round(prop.table(ihd_table), digits=2)
+# As shown in the result: 0(survivor) = 86%; 1(died in-hospital) = 14% 
+
+cat("Frequency for the categories of ICUType variable")
+type_table <- table(icu_patients_df1$ICUType)
+addmargins(type_table)
+round(prop.table(type_table), digits=2)
+# As shown in the result: Coronary Care Unit=14%; Surgery Recovery Unit=22%; Medical ICU=38%; Surgical ICU=26%
+
+cat("Frequency for the categories of Gender variable")
+Gender_table <- table(icu_patients_df1$Gender)
+addmargins(Gender_table)
+round(prop.table(Gender_table), digits=2)
+# As shown in the result: Female=44%; Male=56%
+
+summary(icu_patients_df1[,c("Length_of_stay","SAPS1","SOFA","Survival","Age")])
+
+```
+
+
+```{r Taks2_Part2.b}
+# select only the rows with death as an outcome
+hospitaldeath <- icu_patients_df1[icu_patients_df1$in_hospital_death == 1, ]
+
+# Plot the overall Kaplan-Meier survival curve for the hospitaldeath data
+hd_fit <- survfit( Surv(Days,Status) ~ 1, data = hospitaldeath) 
+summary(hd_fit)
+
+# plotting Kaplan-Meier estimate
+plot(hd_fit, main = 'Kaplan-Meier estimate of survival function', xlab = 'Days')
+
+# The Kaplan-Meier plot allows us to see how the survival function changes over time. 
+# The dotted lines around the survival curve represents the 95% confidence interval.
+
+# get the mean and median survival times
+print(hd_fit, print.rmean = TRUE)
+# plot the median survival time
+plot(hd_fit, main = 'Kaplan-Meier estimate of survival function', xlab = 'Days')
+abline(a = 0.5, b = 0)
+
+# As shown in the table, there were 297 events (deaths) during the follow-up, and the median follow-up time until death is 8 days.
+
+# plotting Nelson-Aalen estimate
+plot(hd_fit, fun="cumhaz", main = "Nelson-Aalen estimate of cumulative hazard function", xlab = "Days")
+# As shown in the plot, the confidence interval becomes wider after 50 days. 
+
+# plot the Kaplan-Meier survival curves by the categorical variables
+par(mfrow=c(2,2))
+hd_fitbyihd <- survfit( Surv(Days,Status) ~ in_hospital_death, data = hospitaldeath) 
+summary(hd_fitbyihd)
+plot(hd_fitbyihd, main = 'Kaplan-Meier estimate of survival function', xlab = 'in-hospital death',col = c("red","blue"))
+# 0:survivor; 1:died in-hospital
+
+hd_fitbyGender <- survfit( Surv(Days,Status) ~ Gender, data = hospitaldeath) 
+summary(hd_fitbyGender)
+plot(hd_fitbyGender, main = 'Kaplan-Meier estimate of survival function', xlab = 'in-hospital death',col = c("red","blue"))
+
+hd_fitbytype <- survfit( Surv(Days,Status) ~ ICUType, data = hospitaldeath) 
+summary(hd_fitbytype)
+plot(hd_fitbytype, main = 'Kaplan-Meier estimate of survival function', xlab = 'ICU Type',col = c("red","blue","orange","black"))
+
+# calculate log-rank tests for differences in survival experience by the categorical variable
+# get the median survival times by in_hospital_death
+print(hd_fitbytype) 
+# 2-sample log-rank test
+hd_fitbytype2 <- coxph( Surv(Days,Status) ~ ICUType, data = hospitaldeath) 
+summary(hd_fitbytype2)
+
+print(hd_fitbyGender) 
+# 2-sample log-rank test
+hd_fitbyGender2 <- coxph( Surv(Days,Status) ~ Gender, data = hospitaldeath) 
+summary(hd_fitbyGender2)
+```
+The non-significant log-rank test of equality of the survival function means that the null hypothesis cannot be rejected, and there is no significant difference between groups. The variables with non-significant log-rank test are ICUType (p-value = 0.4) and Gender (p-value = 0.8).
+
+```{r Taks2_Part2.c}
+fitbyall <- coxph( Surv(Days,Status) ~ . , data = hospitaldeath) 
+summary(fitbyall)
+
+library(ranger)
+newdata <- na.omit(icu_patients_df1)
+fitall <- ranger(Surv(Days, Status) ~ ., data=newdata, importance = "permutation")
+
+fitalli <- data.frame(sort(round(fitall$variable.importance, 4), decreasing = TRUE))
+names(vi) <- "importance"
+fitalli
+# As shown in the result, 5 most important variables: Survival, in_hospital_death, Bilirubin_min, Urine_max, Glucose_diff
+
+```
+
+
+```{r Taks2_Part2.d}
+# fit Cox PH Model to significant predictor variables
+fitbySurvival <- coxph( Surv(Days,Status) ~ Survival, data = icu_patients_df1) 
+summary(fitbySurvival)
+
+fitbydeath <- coxph( Surv(Days,Status) ~ in_hospital_death, data = icu_patients_df1) 
+summary(fitbydeath)
+
+fitbyBilirubinmin <- coxph( Surv(Days,Status) ~ Bilirubin_min, data = icu_patients_df1) 
+summary(fitbyBilirubinmin)
+
+fitbyUrinemax <- coxph( Surv(Days,Status) ~ Urine_max, data = icu_patients_df1) 
+summary(fitbyUrinemax)
+
+fitbyGlucosediff <- coxph( Surv(Days,Status) ~ Glucose_diff, data = icu_patients_df1) 
+summary(fitbyGlucosediff)
+
+```
+
+
+
+
+
+
+### Task 2 Part3
+```{r Taks2_Part3}
+
+
+
+
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+### Task 2 Part4
+```{r Taks2_Part4}
+
+
+```
+
+
+
+
+
+
+
+### Task 2 Part5
+```{r Taks2_Part5}
+
+
+```
+
+
+
+
+
+
+
+
+
+
+### Task 2 Part6
+```{r Taks2_Part6}
+
+
+```
+
+
+
+
+
+### Task 2 Part7
+```{r Taks2_Part7}
+
+
+```
+
+
+
+
+
+
+
+
+
 
 ## Save, knit and submit
 
