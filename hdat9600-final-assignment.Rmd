@@ -225,20 +225,8 @@ _SCORES: "SOFA"_
 _SOFA score uses GCS, MAP, Creatinine/Urine, PaO2/FiO2, Bilirubin and Platelets._
 ##Selected Variables: "SOFA" 
 Total number of variables = 12
-  
 
-
-##This code gives proportional views (density histogram, filled barplot) of all variables by outcome of in_hospital_death.
-```{r review of all variables}
-ICUMort <- icu_patients_df1
-
-<<<<<<< HEAD
-_SCORES: "SAPS1", "SOFA"_
-_SAPS1 is an acute physiology score using Age, HR, SBP, Temp, RR, UO, BUN, HCT, WCC, glucose, K, Na, HCO3 and GCS. SOFA score uses GCS, creatinine, bilirubin and MAP. We are already using Age, HR, Temp, RR, UO, BUN, HCT, WCC, glucose, K, Na, HCO3, creatinine, bilirubin, MAP and GCS. SAPS is missing 96 variables, leave out. Keep SOFA._
-##Selected Variables: "SOFA"
-#Note from Cath
-_Although there are 96 missing values for SAPS, there are ~2000 rows in the dataset, so it might be an accetable loss.  Suggest including in EDA then decide if we want to carry on with it.  Alternatively, if we include all the variables from SAPS, then we may not need it!_  
-=======
+```{r}
 #remove incomplete variables to maintain data integrity
 ICUMort <- ICUMort[,complete.cases(t(ICUMort))]
 
@@ -260,20 +248,11 @@ for (i in names(ICUMort)){
 
 #dataframe with selected varialbles only
 ICUMort.f <- ICUMort[,c("SOFA", "Glucose_diff", "WBC_min", "pH_diff", "Albumin_max", "BUN_min", "RespRate_min", "HR_diff", "Na_max", "Age", "Gender", "ICUType", "in_hospital_death")]
->>>>>>> 7451c952067e17c06e16b09b85fac7e3209adfff
 
-This code gives proportional views (density histogram, filled barplot) of all variables by outcome of in_hospital_death.
 require("ggplot2")
 library(ggplot2)
-<<<<<<< HEAD
-#create a vector of the variables selected above for EDA
-var_select <- c("Weight_diff", "Age", "Gender", "ICUType","GCS_max", "Na_diff", "MAP_max", "Temp_diff", "HR_diff", "PaO2_max", "PaCO2_diff", "RespRate_diff",  "Urine_max", "Creatinine_min", "BUN_min", "Albumin_max", "Bilirubin_min", "Cholesterol_max", "Glucose_diff", "HCO3_max", "Lactate_min", "WBC_diff", "Platelets_min", "pH_diff","SOFA","SAPS1")
-#Create plots of selected variables
-for (i in names(ICUMort[,var_select])){
-=======
-for (i in names(ICUMort.f)){
->>>>>>> 7451c952067e17c06e16b09b85fac7e3209adfff
 
+for (i in names(ICUMort.f)){
   if(is.numeric(ICUMort.f[[i]])){
   
     print(ggplot(ICUMort.f, aes(ICUMort.f[[i]])) +
@@ -289,45 +268,6 @@ for (i in names(ICUMort.f)){
   }
 
 }
-
-#CATH - adding comparisons of numeric variables against each other
-ggplot(ICUMort, aes(x = SAPS1, y = SOFA, colour = factor(in_hospital_death))) + geom_point()
-#How to clean up min and max variables where min > max.  Assume the values were accidentally switched?
-ICUMort <- ICUMort %>% 
-  mutate(Bilirubin_min_new = ifelse(Bilirubin_min > Bilirubin_max,Bilirubin_max,
-                                    Bilirubin_min)) %>% 
-  mutate(Bilirubin_max_new = ifelse(Bilirubin_min > Bilirubin_max, Bilirubin_min, 
-                                    Bilirubin_max))
-#Possibly need to do this for the other min or max variables used.  I assume the diff variables are absolute numbers since there are no negatives (should check data prep file).  Other variables to check GCS_max, MAP_max,  PaO2_max, Urine_max + Creatinine_min + BUN_min + Albumin_max Cholesterol_max + HCO3_max + Lactate_min + Platelets_min
-
-var_check <- c("GCS", "MAP", "PaO2","Urine", "Creatinine",
-               "BUN", "Albumin", "Cholesterol", "HCO3","Lactate", "Platelets")
-#Check number of instances for each variable where min > max
-for (i in var_check){
-  print(paste("The number of min > max values for",i,"is", sum(ICUMort[,paste(i,"_min", sep="")] > ICUMort[,paste(i,"_max",sep="")])))
-}
-
-#Swap incorrect observations
-ICUMort <- ICUMort %>% 
-  #GCS_max, MAP_max,  PaO2_max
-  mutate(GCS_max_new = ifelse(GCS_min > GCS_max, GCS_min, GCS_max)) %>%
-  mutate(MAP_max_new = ifelse(MAP_min > MAP_max, MAP_min, MAP_max)) %>%
-  mutate(PaO2_max_new = ifelse(PaO2_min > PaO2_max, PaO2_min, PaO2_max)) %>%
-  mutate(Urine_max_new = ifelse(Urine_min > Urine_max, Urine_min, Urine_max)) %>%
-  mutate(Creatinine_min_new = ifelse(Creatinine_min > Creatinine_max, 
-                                   Creatinine_max, Creatinine_min)) %>%
-  mutate(BUN_min_new = ifelse(BUN_min > BUN_max,BUN_max, BUN_min)) %>%
-  mutate(Albumin_max_new = ifelse(Albumin_min > Albumin_max, 
-                                  Albumin_min, Albumin_max)) %>%
-  mutate(Cholesterol_max_new = ifelse(Cholesterol_min > Cholesterol_max, 
-                                      Cholesterol_min, Cholesterol_max)) %>%
-  mutate(HCO3_max_new = ifelse(HCO3_min > HCO3_max, HCO3_min, HCO3_max)) %>%
-  mutate(Lactate_min_new = ifelse(Lactate_min > Lactate_max, 
-                                   Lactate_max, Lactate_min)) %>%
-  mutate(Platelets_min_new = ifelse(Platelets_min > Platelets_max, 
-                                   Platelets_max, Platelets_min))
-  
-           
 
 ```
 
