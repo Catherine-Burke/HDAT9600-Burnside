@@ -271,11 +271,6 @@ for (i in names(ICUMort.f)){
 
 ```
 
-##Comments on plots from Cath
-
-Many of these variables have a right or left skew with the death outcome.  A few outliers
-
-
 
 
 
@@ -300,17 +295,22 @@ icu_patients_df1 %>% dplyr::select(in_hospital_death, SOFA, SAPS1) %>%
 
 ```
 
-```{r, logistic regression model}
-full_mod<-glm(in_hospital_death ~ Weight_diff + Age + Gender + ICUType + GCS_max_new +
-                Na_diff + MAP_max_new + Temp_diff + HR_diff + PaO2_max_new + 
-                PaCO2_diff +RespRate_diff + Urine_max_new + Creatinine_min_new +
-                BUN_min_new + Albumin_max_new + Bilirubin_min_new + 
-                Cholesterol_max_new + Glucose_diff + HCO3_max_new + Lactate_min_new +
-                WBC_diff + Platelets_min_new + pH_diff + SOFA + SAPS1, 
-              family = binomial(), data = ICUMort)
+```{r, univariate models}
+#Should start with univariate models for each of the variables we included.
+###WILL GO BACK AND DO THIS TOMORROW.
+full_mod<-glm(in_hospital_death ~ SOFA + Glucose_diff + WBC_min + pH_diff +
+                Albumin_max + BUN_min + RespRate_min + HR_diff + Na_max +
+                Age + Gender + ICUType, family = binomial(), data = ICUMort)
 summary(full_mod)
-#Remove non-significant variables and compare models
-##TO DO
+drop1(full_mod)
+#Most variables are significant except gender, Glucose diff, WBC_min
+#Remove non-significant variables and compare models - will keep sex in for now.
+red_mod <- glm(in_hospital_death ~ SOFA + + pH_diff + Albumin_max + BUN_min + 
+                 RespRate_min + HR_diff + Na_max +Age + Gender + ICUType, 
+               family = binomial(), data = ICUMort)
+summary(red_mod)
+anova(full_mod,red_mod, test = "Chisq")
+#No significant difference, could accept the simpler model.  However AIC values are still slightly lower when Glucose_diff and WBC_diff are included.
 ```
 
 # Task 2 (15 marks)
