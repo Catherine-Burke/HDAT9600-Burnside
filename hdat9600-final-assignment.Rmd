@@ -213,14 +213,18 @@ _Glucose bad if low or high. HCO3 bad if it’s low. High lactate is bad. WBC ma
 _SCORES: "SAPS1", "SOFA"_
 _SAPS1 is an acute physiology score using Age, HR, SBP, Temp, RR, UO, BUN, HCT, WCC, glucose, K, Na, HCO3 and GCS. SOFA score uses GCS, creatinine, bilirubin and MAP. We are already using Age, HR, Temp, RR, UO, BUN, HCT, WCC, glucose, K, Na, HCO3, creatinine, bilirubin, MAP and GCS. SAPS is missing 96 variables, leave out. Keep SOFA._
 ##Selected Variables: "SOFA"
-
+#Note from Cath
+_Although there are 96 missing values for SAPS, there are ~2000 rows in the dataset, so it might be an accetable loss.  Suggest including in EDA then decide if we want to carry on with it.  Alternatively, if we include all the variables from SAPS, then we may not need it!_  
 
 This code gives proportional views (density histogram, filled barplot) of all variables by outcome of in_hospital_death.
 ```{r review of all variables}
 ICUMort <- icu_patients_df1
 require("ggplot2")
 library(ggplot2)
-for (i in names(ICUMort)){
+#create a vector of the variables selected above for EDA
+var_select <- c("Weight_diff", "Age", "Gender", "ICUType","GCS_max", "Na_diff", "MAP_max", "Temp_diff", "HR_diff", "PaO2_max", "PaCO2_diff", "RespRate_diff",  "Urine_max", "Creatinine_min", "BUN_min", "Albumin_max", "Bilirubin_min", "Cholesterol_max", "Glucose_diff", "HCO3_max", "Lactate_min", "WBC_diff", "Platelets_min", "pH_diff","SOFA","SAPS1")
+#Create plots of selected variables
+for (i in names(ICUMort[,var_select])){
 
   if(is.numeric(ICUMort[[i]])){
   
@@ -237,17 +241,52 @@ for (i in names(ICUMort)){
   }
 
 }
+
+#CATH - adding comparisons of numeric variables against each other
+ggplot(ICUMort, aes(x = SAPS1, y = SOFA, colour = factor(in_hospital_death))) + geom_point()
+#How to clean up min and max variables where min > max.  Assume the values were accidentally switched?
+ICUMort <- ICUMort %>% 
+  mutate(Bilirubin_min_new = ifelse(Bilirubin_min > Bilirubin_max,Bilirubin_max,
+                                    Bilirubin_min)) %>% 
+  mutate(Bilirubin_max_new = ifelse(Bilirubin_min > Bilirubin_max, Bilirubin_min, 
+                                    Bilirubin_max))
+#Possibly need to do this for the other min or max variables used.  I assume the diff variables are absolute numbers since there are no negatives (should check data prep file).  Other variables to check GCS_max, MAP_max,  PaO2_max, Urine_max + Creatinine_min + BUN_min + Albumin_max Cholesterol_max + HCO3_max + Lactate_min + Platelets_min
+
+var_check <- c("GCS", "MAP", "PaO2","Urine", "Creatinine",
+               "BUN", "Albumin", "Cholesterol", "HCO3","Lactate", "Platelets")
+#Check number of instances for each variable where min > max
+for (i in var_check){
+  print(paste("The number of min > max values for",i,"is", sum(ICUMort[,paste(i,"_min", sep="")] > ICUMort[,paste(i,"_max",sep="")])))
+}
+
+#Swap incorrect observations
+ICUMort <- ICUMort %>% 
+  #GCS_max, MAP_max,  PaO2_max
+  mutate(GCS_max_new = ifelse(GCS_min > GCS_max, GCS_min, GCS_max)) %>%
+  mutate(MAP_max_new = ifelse(MAP_min > MAP_max, MAP_min, MAP_max)) %>%
+  mutate(PaO2_max_new = ifelse(PaO2_min > PaO2_max, PaO2_min, PaO2_max)) %>%
+  mutate(Urine_max_new = ifelse(Urine_min > Urine_max, Urine_min, Urine_max)) %>%
+  mutate(Creatinine_min_new = ifelse(Creatinine_min > Creatinine_max, 
+                                   Creatinine_max, Creatinine_min)) %>%
+  mutate(BUN_min_new = ifelse(BUN_min > BUN_max,BUN_max, BUN_min)) %>%
+  mutate(Albumin_max_new = ifelse(Albumin_min > Albumin_max, 
+                                  Albumin_min, Albumin_max)) %>%
+  mutate(Cholesterol_max_new = ifelse(Cholesterol_min > Cholesterol_max, 
+                                      Cholesterol_min, Cholesterol_max)) %>%
+  mutate(HCO3_max_new = ifelse(HCO3_min > HCO3_max, HCO3_min, HCO3_max)) %>%
+  mutate(Lactate_min_new = ifelse(Lactate_min > Lactate_max, 
+                                   Lactate_max, Lactate_min)) %>%
+  mutate(Platelets_min_new = ifelse(Platelets_min > Platelets_max, 
+                                   Platelets_max, Platelets_min))
+  
+           
+
 ```
 
+##Comments on plots from Cath
 
-##Cath
-##Selecting predictor variables for in hostital death
+Many of these variables have a right or left skew with the death outcome.  A few outliers
 
-SAPS1 and SOFA seem like obvious choices, as these have been developed as predictors of clinical outcomes (SOFA) and risk of death (SAPS-I).  
-
-Age should also be included, as those who are very young or very old will likely have a higher risk of death.
-
-Include variables from SAPS-I as this has already been verified to correlate with increased risk of death (BUN, GCS, HCO3, HCT, HR, K, Na, RespRate, SysABP, Urine, WBC). Similarly for SOPS (PaO2, Platelets, Bilirubin, Creatinine, GCS).
 
 
 
@@ -273,6 +312,18 @@ icu_patients_df1 %>% dplyr::select(in_hospital_death, SOFA, SAPS1) %>%
 
 ```
 
+```{r, logistic regression model}
+full_mod<-glm(in_hospital_death ~ Weight_diff + Age + Gender + ICUType + GCS_max_new +
+                Na_diff + MAP_max_new + Temp_diff + HR_diff + PaO2_max_new + 
+                PaCO2_diff +RespRate_diff + Urine_max_new + Creatinine_min_new +
+                BUN_min_new + Albumin_max_new + Bilirubin_min_new + 
+                Cholesterol_max_new + Glucose_diff + HCO3_max_new + Lactate_min_new +
+                WBC_diff + Platelets_min_new + pH_diff + SOFA + SAPS1, 
+              family = binomial(), data = ICUMort)
+summary(full_mod)
+#Remove non-significant variables and compare models
+##TO DO
+```
 
 # Task 2 (15 marks)
 
