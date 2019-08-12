@@ -353,9 +353,6 @@ Gender_table <- table(icu_patients_df1$Gender)
 addmargins(Gender_table)
 round(prop.table(Gender_table), digits=2)
 # As shown in the result: Female=44%; Male=56%
-
-summary(icu_patients_df1[,c("Length_of_stay","SAPS1","SOFA","Survival","Age")])
-
 ```
 
 
@@ -415,82 +412,144 @@ summary(hd_fitbyGender2)
 The non-significant log-rank test of equality of the survival function means that the null hypothesis cannot be rejected, and there is no significant difference between groups. The variables with non-significant log-rank test are ICUType (p-value = 0.4) and Gender (p-value = 0.8).
 
 
-
-
-
-## Yalin
-I am a little confused about how to choose predictor variables for the model, but I found ranger function can be used to find the most important variable, don't know if it works
-
-
-
-
-
 ```{r Taks2_Part2.c}
-fitbyall <- coxph( Surv(Days,Status) ~ . , data = hospitaldeath) 
+fitbyall <- coxph( Surv(Days,Status) ~ . , data = icu_patients_df1) 
 summary(fitbyall)
 
-library(ranger)
-newdata <- na.omit(icu_patients_df1)
-fitall <- ranger(Surv(Days, Status) ~ ., data=newdata, importance = "permutation")
+# sort p-value 
+fitallp <- data.frame(sort(summary(fitbyall)$coef[summary(fitbyall)$coef[,5] <= .05, 5], decreasing = FALSE))
+names(fitallp) <- "Pr(>|z|)"
+fitallp
 
-fitalli <- data.frame(sort(round(fitall$variable.importance, 4), decreasing = TRUE))
-names(vi) <- "importance"
-fitalli
-# As shown in the result, 5 most important variables: Survival, in_hospital_death, Bilirubin_min, Urine_max, Glucose_diff
+# 11 most significant variables: 
+# ALP_max, ALP_min, Cholesterol_min, Creatinine_max, Creatinine_min
+# MAP_diff, MAP_max, NIMAP_min, pH_min, Urine_diff, Urine_max
 
 ```
 
 
 ```{r Taks2_Part2.d}
+# Basic exploratory data analysis on variables of choice
+
+# ALP_max, ALP_min, Cholesterol_min, Creatinine_max, Creatinine_min
+# MAP_diff, MAP_max, NIMAP_min, pH_min, Urine_diff, Urine_max
+
+
+summary(icu_patients_df1[,c("ALP_max","ALP_min","Cholesterol_min","Creatinine_max","Creatinine_min",
+                            "MAP_diff","MAP_max","NIMAP_min","pH_min","Urine_diff", "Urine_max")])
+
+```
+
+### Task 2 Part3
+```{r Taks2_Part3}
 # fit Cox PH Model to significant predictor variables
-fitbySurvival <- coxph( Surv(Days,Status) ~ Survival, data = icu_patients_df1) 
-summary(fitbySurvival)
+# fit appropriate univariate Cox proportional hazards models
 
-fitbydeath <- coxph( Surv(Days,Status) ~ in_hospital_death, data = icu_patients_df1) 
-summary(fitbydeath)
+fitbyALPmax <- coxph( Surv(Days,Status) ~ ALP_max, data = icu_patients_df1) 
+summary(fitbyALPmax)
 
-fitbyBilirubinmin <- coxph( Surv(Days,Status) ~ Bilirubin_min, data = icu_patients_df1) 
-summary(fitbyBilirubinmin)
+fitbyALPmin <- coxph( Surv(Days,Status) ~ ALP_min, data = icu_patients_df1) 
+summary(fitbyALPmin)
+
+fitbyCholesterolmin <- coxph( Surv(Days,Status) ~ Cholesterol_min, data = icu_patients_df1) 
+summary(fitbyCholesterolmin)
+
+fitbyCreatininemax <- coxph( Surv(Days,Status) ~ Creatinine_max, data = icu_patients_df1) 
+summary(fitbyCreatininemax)
+
+fitbyCreatininemin <- coxph( Surv(Days,Status) ~ Creatinine_min, data = icu_patients_df1) 
+summary(fitbyCreatininemin)
+
+fitbyMAPdiff <- coxph( Surv(Days,Status) ~ MAP_diff, data = icu_patients_df1) 
+summary(fitbyMAPdiff)
+
+fitbyMAPmax <- coxph( Surv(Days,Status) ~ MAP_max, data = icu_patients_df1) 
+summary(fitbyMAPmax)
+
+fitbyNIMAPmin <- coxph( Surv(Days,Status) ~ NIMAP_min, data = icu_patients_df1) 
+summary(fitbyNIMAPmin)
+
+fitbypHmin <- coxph( Surv(Days,Status) ~ pH_min, data = icu_patients_df1) 
+summary(fitbypHmin)
+
+fitbyUrinediff <- coxph( Surv(Days,Status) ~ Urine_diff, data = icu_patients_df1) 
+summary(fitbyUrinediff)
 
 fitbyUrinemax <- coxph( Surv(Days,Status) ~ Urine_max, data = icu_patients_df1) 
 summary(fitbyUrinemax)
 
-fitbyGlucosediff <- coxph( Surv(Days,Status) ~ Glucose_diff, data = icu_patients_df1) 
-summary(fitbyGlucosediff)
-
 ```
+The maximum likelihood estimate of the regression coefficient (coef) for ALP_max is 0.0012183 (a positive sign means that the hazard (risk of death) is higher), and thus hazard ratio for ALP_max is exp(0.0012183) = 1.0012190.  
+The wald statistic evaluates, whether the beta coefficient of a given variable is statistically significantly different from 0. From the output above, we can conclude that the variable ALP_max have statistically significant coefficients (p-value=0.000399).
+The output also provides a 95% confidence interval for ALP_max, 1.001 to 1.002.  
+Finally, the output gives p-values for three alternative tests for overall significance of the model: the likelihood-ratio test, Wald test, and score logrank statistics. As shown in the result, the p-value for the overall significance of the model is less than 0.05. 
 
 
-
-
-
-
-### Task 2 Part3
-```{r Taks2_Part3}
-
-
-
-
-
-
-
-
-```
-
-
-
-
-
-
-
+Non-significant: MAP_max
 
 
 
 ### Task 2 Part4
-```{r Taks2_Part4}
+```{r Taks2_Part4.a}
+# fit multivariable Cox proportional hazards models with significant variables above
+cox.mv1 <- coxph(Surv(Days, Status) ~ ALP_max + ALP_min + Cholesterol_min + Creatinine_max + Creatinine_min + MAP_diff  +  MAP_max + NIMAP_min + pH_min + Urine_diff + Urine_max, data = icu_patients_df1)
+summary(cox.mv1)
+
+# Not significant in multivariable model
+# ALP_max, ALP_min, Creatinine_max, Creatinine_min, MAP_diff, MAP_max
+
+# fit multivariable Cox proportional hazards models with significant univariate Cox proportional hazards models
+cox.mv2 <- coxph(Surv(Days, Status) ~ ALP_max + ALP_min + Cholesterol_min + Creatinine_max + Creatinine_min + MAP_diff  + NIMAP_min + pH_min + Urine_diff + Urine_max, data = icu_patients_df1)
+summary(cox.mv2)
+
+# Not significant in multivariable model
+# ALP_max, ALP_min, Creatinine_max, Creatinine_min
+
+# The p-value (<2e-16) for all three overall tests (likelihood ratio test, Wald test, and score test) are significant, indicating that the model is significant.
+
+cox.mv3 <- coxph(Surv(Days, Status) ~ Cholesterol_min + NIMAP_min + pH_min + Urine_diff + Urine_max, data = icu_patients_df1)
+summary(cox.mv3)
+
+print(anova(cox.mv1, cox.mv2))
+print(anova(cox.mv2, cox.mv3))
+
+# If the p-value is not sufficiently low (usually greater than 0.05), we should favor the simpler model
+# As shown in the result above, the p-value (0.7971) is not significant, cox.mv2 will be chosen.
+#  p-value (0.009266) is significant, cox.mv2 will be chosen.
+
+
+# the AICs for the two models
+extractAIC(cox.mv1)
+extractAIC(cox.mv2)
+extractAIC(cox.mv3)
+
+# Higher (worse) AIC for the cox.mv3 model
+
+```
+
+
+```{r Taks2_Part4.b}
+cox.mv2 <- coxph(Surv(Days, Status) ~ ALP_max + ALP_min + Cholesterol_min + Creatinine_max + Creatinine_min + MAP_diff  + NIMAP_min + pH_min + Urine_diff + Urine_max, data = icu_patients_df1)
+summary(cox.mv2)
+
+# testing for proportional hazards assumption using cox.zph()
+prop.mv1 <- cox.zph(cox.mv2)
+prop.mv1
+
+survminer::ggcoxzph(prop.mv1)
+
+
+
+
+
+
 
 
 ```
+
+
+
+
 
 
 
@@ -500,6 +559,9 @@ summary(fitbyGlucosediff)
 
 ### Task 2 Part5
 ```{r Taks2_Part5}
+
+
+
 
 
 ```
@@ -518,6 +580,10 @@ summary(fitbyGlucosediff)
 
 
 ```
+
+
+
+
 
 
 
