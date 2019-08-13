@@ -338,9 +338,81 @@ _will include some commentary on these results_
 Next step is to examine the goodness of fit, and model assumptions.
 
 ```{r; Task1, goodness of fit}
+#Calculate the Hosmer-Lemeshow statistic
+#linear predictors
+require(ResourceSelection)
+library(ResourceSelection)
+#Vector of predicted probabilities
+pred <- predict(red_mod, type = "response")
+hl <- hoslem.test(red_mod$y, pred, g=80)
+hl
+#No indication of a lack of fit as p > 0.05.
+#Create Brier score
+bs <- mean((pred - t.ICUMort$in_hospital_death)^2)
+bs
+#Compare to full model
+bs_full <- mean((predict(full_mod, type = "response") - t.ICUMort$in_hospital_death)^2)
+bs_full
+#Almost the same, more parsimonious model acceptible
+#Compare to null model
+bc_null <- mean((predict(null_mod, type = "response") - t.ICUMort$in_hospital_death)^2)
+bc_null
+#Brier score indicates that the reduced and full models are better than the null, but nor by a huge degree.
+#PseudoR2
+library(DescTools)
+#PsuedoR2 for reduced
+PseudoR2(red_mod, which = "all")
+#PsuedoR2 for full
+PseudoR2(full_mod, which = "all")
+#PsuedoR2 for null
+PseudoR2(null_mod, which = "all")
+#Relatively small proportion of variance explained, but a lot more than the null model.
+```
+
+##Goodness of fit
+Both the full and reduced model explain more variation than the null model, but it is a relatively small amount of the variance (McFadden ~0.17).  No evidence of a lack of fit from the Hosmer-Lemeshow statistic, and Brier scores are lower (i.e. better) for both full ad reduced model compared to the null.  Not a huge difference between the full and reduced models.
+
+```{r}
+#Calculate confusion matrix
+library(caret)
+#Create vector of predicted outcomes, set 0.5 as threshold
+pred_oc <- as.factor(ifelse(pred < 0.5, "no", "yes"))
+#Convert outcome to no yes factor
+oc <- as.factor(ifelse(t.ICUMort$in_hospital_death == 0, "no", "yes"))
+confusionMatrix(pred_oc, oc, positive = "yes")
+#Not a great at predicting death, only ~16% sensitivity.  Look at distribution of predicted probs for each case.
+mod_pred <- data.frame(pred,oc)
+ggplot(mod_pred, aes(x = oc, y = pred)) + geom_boxplot() +
+  labs(title = "Predicted probabilities from reduced model by outcome", 
+       x = "Death", y = "Probability")
+#Based on the graphs, change the threshold for considering the outcome to occur to 0.2
+#Create vector of predicted outcomes, set 0.5 as threshold
+pred_oc2 <- as.factor(ifelse(pred < 0.2, "no", "yes"))
+#Convert outcome to no yes factor
+confusionMatrix(pred_oc2, oc, positive = "yes")
+#Still not great at predicting the outcome, sensitivity improved, but specificity is reduced - pos predictive value only 35%. Should look to see how this compares to 
+#First try ROC
+library(Epi)
+#Plot reduced model ROC
+ROC(pred, oc, plot = "ROC", main = "Reduced model ROC")
+#Plot full model ROC
+pred_full <- predict(full_mod, type = "response")
+ROC(pred_full, oc, plot = "ROC", main = "Full model ROC")
 
 ```
 
+##Predictive value
+Moderate performance of the model, with ROC AUC of 0.786.  By comparison, the mean SOFA score showed AUC of ~0.88 in the publication linked above.  
+
+Maybe if more variables are included from the initial set, a better prediction could be achieved?
+
+What about SOFA alone?
+```{r - check AUC of univariate SOFA model}
+ROC(predict(unimod_list[[1]], type = "response"), oc, plot = "ROC")
+#AUC only 0.651 in this dataset for a univariate SOFA model.
+```
+
+I wonder if we should try to include SAPS1 with missing rows removed from the entire dataset - would mean loosing 96 of 2061.  Could also try adding other variables ruled out above to the model to see if we get a better fit.
 
 # Task 2 (15 marks)
 
