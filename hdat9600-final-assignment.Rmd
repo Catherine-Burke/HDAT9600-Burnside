@@ -318,6 +318,8 @@ Include variables from SAPS-I as this has already been verified to correlate wit
 
 
 ```{r, EDA}
+##JASON - I'm happy to remove this section, you've done a nice EDA above.
+
 #added require and lib statement to make sure appropriate packages loaded, I also had a conflict with the select function 
 require("dplyr","tidyr","ggplot2")
 library(dplyr)
@@ -344,7 +346,7 @@ icu_patients_df1 %>% dplyr::select(in_hospital_death, SOFA, SAPS1) %>%
 var_selection <- c("SOFA", "Glucose_diff", "WBC_min", "pH_diff", "Albumin_max", "BUN_min", "RespRate_min", "HR_diff", "Na_max", "Age", "Gender", "ICUType")
 #Create a list of univariate models for each of the variables selected
 formulas<- paste('in_hospital_death ~', var_selection)
-unimod_list <- lapply(formulas, glm, family = binomial(), data = t.ICUMort)
+unimod_list <- lapply(formulas, glm, family = binomial(), data = ICUMort)
 #Summary of all models
 unimod_summ <- lapply(unimod_list, summary)
 unimod_summ
@@ -360,10 +362,10 @@ unimod_odds
 #Include all variables from above
 full_mod<-glm(in_hospital_death ~ SOFA + Glucose_diff + WBC_min + pH_diff +
                 Albumin_max + BUN_min + RespRate_min + HR_diff + Na_max +
-                Age + Gender + ICUType, family = binomial(), data = t.ICUMort)
+                Age + Gender + ICUType, family = binomial(), data = ICUMort)
 summary(full_mod)
 #Compare to a null model
-null_mod <- glm(in_hospital_death ~ 1, family = binomial, data = t.ICUMort)
+null_mod <- glm(in_hospital_death ~ 1, family = binomial, data = ICUMort)
 anova(full_mod, null_mod, test = "Chisq")
 #Reject null hypothesis of no relationship between predictors and outcome
 #Check AIC when removing variables sequentially
@@ -371,7 +373,7 @@ step(full_mod, trace = 1)
 #AIC is lowest when WBC_min, Glucose_diff and Gender are removed.  Will fit a reduced model, but will keep Gender in the model for now - good to show whether sex has an influence on the outcome or not.
 red_mod <- glm(in_hospital_death ~ SOFA + pH_diff + Albumin_max + BUN_min + 
                  RespRate_min + HR_diff + Na_max +Age + Gender + ICUType, 
-               family = binomial(), data = t.ICUMort)
+               family = binomial(), data = ICUMort)
 summary(red_mod)
 #Compare full and reduced model
 anova(full_mod,red_mod, test = "Chisq")
@@ -381,7 +383,7 @@ _will include some commentary on these results_
 
 Next step is to examine the goodness of fit, and model assumptions.
 
-```{r; Task1, goodness of fit}
+```{r, Task1, goodness of fit}
 #Calculate the Hosmer-Lemeshow statistic
 #linear predictors
 require(ResourceSelection)
@@ -392,14 +394,14 @@ hl <- hoslem.test(red_mod$y, pred, g=80)
 hl
 #No indication of a lack of fit as p > 0.05.
 #Create Brier score
-bs <- mean((pred - t.ICUMort$in_hospital_death)^2)
+bs <- mean((pred - ICUMort$in_hospital_death)^2)
 bs
 #Compare to full model
-bs_full <- mean((predict(full_mod, type = "response") - t.ICUMort$in_hospital_death)^2)
+bs_full <- mean((predict(full_mod, type = "response") - ICUMort$in_hospital_death)^2)
 bs_full
 #Almost the same, more parsimonious model acceptible
 #Compare to null model
-bc_null <- mean((predict(null_mod, type = "response") - t.ICUMort$in_hospital_death)^2)
+bc_null <- mean((predict(null_mod, type = "response") - ICUMort$in_hospital_death)^2)
 bc_null
 #Brier score indicates that the reduced and full models are better than the null, but nor by a huge degree.
 #PseudoR2
@@ -422,7 +424,7 @@ library(caret)
 #Create vector of predicted outcomes, set 0.5 as threshold
 pred_oc <- as.factor(ifelse(pred < 0.5, "no", "yes"))
 #Convert outcome to no yes factor
-oc <- as.factor(ifelse(t.ICUMort$in_hospital_death == 0, "no", "yes"))
+oc <- as.factor(ifelse(ICUMort$in_hospital_death == 0, "no", "yes"))
 confusionMatrix(pred_oc, oc, positive = "yes")
 #Not a great at predicting death, only ~16% sensitivity.  Look at distribution of predicted probs for each case.
 mod_pred <- data.frame(pred,oc)
