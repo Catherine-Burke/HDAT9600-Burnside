@@ -246,8 +246,8 @@ _Low sodium worse than high sodium but both bad. Sodium not a clear neurological
 Total number of variables = 5
 
 _Cardiovascular: "HR_diff", "HR_max", "HR_min", "K_diff", "K_max", "K_min", "Mg_diff", "Mg_max", "Mg_min", "Temp_diff", "Temp_max", "Temp_min", "TroponinI_diff", "TroponinI_max", "TroponinI_min", "TroponinT_diff", "TroponinT_max", "TroponinT_min"_
-_TroponinI is the value that is routinely checked for patient's who present with chest pain/MI but there’s likely only a small proportion of admissions this would be abnormal in. Temp is bad if high or low, can be a marker for infection. Likely WBC will be better. HR bad if too high or too low, marker for SIRS. Unsure about usefulness of including electrolytes (K, Mg) as they are quite modifiable, leave out._
-##Selected Variables: "HR_diff"
+_TroponinI is the value that is routinely checked for patient's who present with chest pain/MI but there’s likely only a small proportion of admissions this would be abnormal in. Temp is bad if high or low, can be a marker for infection. Likely WBC will be better. HR bad if too high or too low, marker for SIRS. Unsure about usefulness of including electrolytes (K, Mg) as they are quite modifiable, leave out. Initially left out MAP because of it's included in SOFA but now not using SOFA, use MAP over HR as marker of CVS failure._
+##Selected Variables: "MAP_max"
 Total number of variables = 6
 
 _Respiratory: "PaCO2_diff", "PaCO2_max", "PaCO2_min", "RespRate_diff", "RespRate_max", "RespRate_min", "SaO2_diff", "SaO2_max", "SaO2_min"_
@@ -281,7 +281,7 @@ Total number of variables = 13
 ```{r review of selected variables}
 
 #dataframe with selected varialbles only
-ICUMort.f <- ICUMort[,c("Glucose_diff", "WBC_min", "pH_diff", "Bilirubin_min", "BUN_min", "PaO2_max", "RespRate_min", "HR_diff", "Na_max", "GCS_max", "Age", "Gender", "ICUType", "in_hospital_death")]
+ICUMort.f <- ICUMort[,c("Glucose_diff", "WBC_min", "pH_diff", "Bilirubin_min", "BUN_min", "PaO2_max", "RespRate_min", "MAP_max", "Na_max", "GCS_max", "Age", "Gender", "ICUType", "in_hospital_death")]
 
 summary(ICUMort.f)
 str(ICUMort.f)
@@ -301,7 +301,6 @@ for (i in names(ICUMort.f)){
           labs(x = i, fill = "Died", title = paste0("Bar Plot of ", i,", ",  length(na.omit(ICUMort.f[[i]])), " values available")))
   
   }
-
 }
 
 
@@ -337,6 +336,7 @@ for (i in names(ICUMort.f[,names(ICUMort.f)!="in_hospital_death"])){
 
 
 #correlation plot to  explore relationships
+library(corrplot)
 ICUMort.cor <- cor(ICUMort.f[,sapply(ICUMort.f, is.numeric)])
 corrplot(ICUMort.cor,  method = "circle", type = "upper")
 
@@ -355,11 +355,12 @@ Age should also be included, as those who are very young or very old will likely
 
 Include variables from SAPS-I as this has already been verified to correlate with increased risk of death (BUN, GCS, HCO3, HCT, HR, K, Na, RespRate, SysABP, Urine, WBC). Similarly for SOPS (PaO2, Platelets, Bilirubin, Creatinine, GCS).
 
-```
 
 
 
 ```{r, EDA}
+##JASON - I'm happy to remove this section, you've done a nice EDA above.
+
 #added require and lib statement to make sure appropriate packages loaded, I also had a conflict with the select function 
 require("dplyr","tidyr","ggplot2")
 library(dplyr)
@@ -383,7 +384,7 @@ icu_patients_df1 %>% dplyr::select(in_hospital_death, SOFA, SAPS1) %>%
 ```{r, univariate models}
 #Should start with univariate models for each of the variables we included.
 #Create vector of variables
-var_selection <- c("Glucose_diff", "WBC_min", "pH_diff", "Bilirubin_min", "BUN_min", "PaO2_max", "RespRate_min", "HR_diff", "Na_max", "GCS_max", "Age", "Gender", "ICUType")
+var_selection <- c("Glucose_diff", "WBC_min", "pH_diff", "Bilirubin_min", "BUN_min", "PaO2_max", "RespRate_min", "MAP_max", "Na_max", "GCS_max", "Age", "Gender", "ICUType")
 #Create a list of univariate models for each of the variables selected
 formulas<- paste('in_hospital_death ~', var_selection)
 unimod_list <- lapply(formulas, glm, family = binomial(), data = ICUMort.f)
@@ -408,13 +409,13 @@ unimod_int_summ
 ```{r, multivariate models}
 #Include all variables from above
 full_mod<-glm(in_hospital_death ~ Glucose_diff + WBC_min + pH_diff +
-                Albumin_max + BUN_min + RespRate_min + HR_diff + Na_max + GCS_Max +
+                Albumin_max + BUN_min + RespRate_min + MAP_max + Na_max + GCS_Max +
                 Age + Gender + ICUType, family = binomial(), data = ICUMort.f)
 summary(full_mod)
 
 #Full model with interactions
 full_mod_int <-glm(in_hospital_death ~ Glucose_diff + WBC_min + pH_diff +
-                Albumin_max + BUN_min + RespRate_min + HR_diff + Na_max + GCS_Max +
+                Albumin_max + BUN_min + RespRate_min + MAP_max + Na_max + GCS_Max +
                 Age + Gender + ICUType + Age:Gender + Glucose_diff:Gender + BUN_min:Gender + 
                 RespRate_min:Gender + Bilirubin_min:Gender + BUN_min:ICUType + PaO2_max:ICUType +
                 Bilirubin_min:ICUType + GCS_max:ICUType, family = binomial(), data = ICUMort.f)
@@ -442,7 +443,7 @@ red_mod$aic
 
 #AIC is lowest when WBC_min, Glucose_diff and Gender are removed.  Will fit a reduced model, but will keep Gender in the model for now - good to show whether sex has an influence on the outcome or not.
 red_mod <- glm(in_hospital_death ~ SOFA + pH_diff + Albumin_max + BUN_min + GCS_Max +
-                 RespRate_min + HR_diff + Na_max +Age + Gender + ICUType, 
+                 RespRate_min + MAP_max + Na_max +Age + Gender + ICUType, 
                family = binomial(), data = ICUMort.f)
 summary(red_mod)
 #Compare full and reduced model
@@ -455,10 +456,82 @@ _will include some commentary on these results_
 
 Next step is to examine the goodness of fit, and model assumptions.
 
-```{r; Task1, goodness of fit}
+```{r, Task1, goodness of fit}
+#Calculate the Hosmer-Lemeshow statistic
+#linear predictors
+require(ResourceSelection)
+library(ResourceSelection)
+#Vector of predicted probabilities
+pred <- predict(red_mod, type = "response")
+hl <- hoslem.test(red_mod$y, pred, g=80)
+hl
+#No indication of a lack of fit as p > 0.05.
+#Create Brier score
+bs <- mean((pred - ICUMort$in_hospital_death)^2)
+bs
+#Compare to full model
+bs_full <- mean((predict(full_mod, type = "response") - ICUMort$in_hospital_death)^2)
+bs_full
+#Almost the same, more parsimonious model acceptible
+#Compare to null model
+bc_null <- mean((predict(null_mod, type = "response") - ICUMort$in_hospital_death)^2)
+bc_null
+#Brier score indicates that the reduced and full models are better than the null, but nor by a huge degree.
+#PseudoR2
+library(DescTools)
+#PsuedoR2 for reduced
+PseudoR2(red_mod, which = "all")
+#PsuedoR2 for full
+PseudoR2(full_mod, which = "all")
+#PsuedoR2 for null
+PseudoR2(null_mod, which = "all")
+#Relatively small proportion of variance explained, but a lot more than the null model.
+```
+
+##Goodness of fit
+Both the full and reduced model explain more variation than the null model, but it is a relatively small amount of the variance (McFadden ~0.17).  No evidence of a lack of fit from the Hosmer-Lemeshow statistic, and Brier scores are lower (i.e. better) for both full ad reduced model compared to the null.  Not a huge difference between the full and reduced models.
+
+```{r}
+#Calculate confusion matrix
+library(caret)
+#Create vector of predicted outcomes, set 0.5 as threshold
+pred_oc <- as.factor(ifelse(pred < 0.5, "no", "yes"))
+#Convert outcome to no yes factor
+oc <- as.factor(ifelse(ICUMort$in_hospital_death == 0, "no", "yes"))
+confusionMatrix(pred_oc, oc, positive = "yes")
+#Not a great at predicting death, only ~16% sensitivity.  Look at distribution of predicted probs for each case.
+mod_pred <- data.frame(pred,oc)
+ggplot(mod_pred, aes(x = oc, y = pred)) + geom_boxplot() +
+  labs(title = "Predicted probabilities from reduced model by outcome", 
+       x = "Death", y = "Probability")
+#Based on the graphs, change the threshold for considering the outcome to occur to 0.2
+#Create vector of predicted outcomes, set 0.5 as threshold
+pred_oc2 <- as.factor(ifelse(pred < 0.2, "no", "yes"))
+#Convert outcome to no yes factor
+confusionMatrix(pred_oc2, oc, positive = "yes")
+#Still not great at predicting the outcome, sensitivity improved, but specificity is reduced - pos predictive value only 35%. Should look to see how this compares to 
+#First try ROC
+library(Epi)
+#Plot reduced model ROC
+ROC(pred, oc, plot = "ROC", main = "Reduced model ROC")
+#Plot full model ROC
+pred_full <- predict(full_mod, type = "response")
+ROC(pred_full, oc, plot = "ROC", main = "Full model ROC")
 
 ```
 
+##Predictive value
+Moderate performance of the model, with ROC AUC of 0.786.  By comparison, the mean SOFA score showed AUC of ~0.88 in the publication linked above.  
+
+Maybe if more variables are included from the initial set, a better prediction could be achieved?
+
+What about SOFA alone?
+```{r - check AUC of univariate SOFA model}
+ROC(predict(unimod_list[[1]], type = "response"), oc, plot = "ROC")
+#AUC only 0.651 in this dataset for a univariate SOFA model.
+```
+
+I wonder if we should try to include SAPS1 with missing rows removed from the entire dataset - would mean loosing 96 of 2061.  Could also try adding other variables ruled out above to the model to see if we get a better fit.
 
 # Task 2 (15 marks)
 
