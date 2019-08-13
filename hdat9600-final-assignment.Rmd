@@ -182,7 +182,48 @@ library(tidyverse)
 We only need to include 5-10ish variables. This is requires a logical approach to culling. Propose first step is to remove any variables that do not have a full set of data (eg 2061 records). The rationale for this is that if you include variables incomplete variables then if you drop an incomplete variable you may not be able to adequately compare the models. Suggest 1 variable per body system not covered in SOFA score (GCS, MAP, Creatinine/Urine, PaO2/FiO2, Bilirubin, Platelets) as SOFA covers those variables.  
   
 #I would be interested to hear people's thoughts on whether we should use the "diff" variables vs running the values as quadratic term "I(x^2)" instead. I suppose the advantage of "diff" is it is supposed to be the most deranged from the mean in either direction whereas the quadratic term would give us a "U" shaped relationship as opposed to a linear one.  
-  
+
+ ```{r variable to be assessed}
+
+#check which variables have a complete set of data
+ls(icu_patients_df1[,complete.cases(t(icu_patients_df1))])
+
+#remove incomplete variables to maintain data integrity
+ICUMort <- icu_patients_df1[,complete.cases(t(icu_patients_df1))]
+
+#check data for internal consistency (max vs min values)
+for (i in names(ICUMort)){
+  if (substr(i, nchar(i)-2, nchar(i)) == "max"){
+  j <- paste0(substr(i, 1, nchar(i)-4 ),"_min")
+  print(c(substr(i, 1, nchar(i)-4 ), length(as.matrix(ICUMort[ICUMort[,i]<ICUMort[,j],c(i,j)]))))
+  }
+}
+
+#ensure all max and min values are in the right columns
+#function to swap values that are inconsistent with allocation
+maxval <- function(df, Max, Min){
+  df[na.omit(df[,Max])<na.omit(df[,Min]),c(Min,Max)] <- unname(df[na.omit(df[,Max])<na.omit(df[,Min]),c(Max,Min)])
+  df
+}
+
+#loop checks for "max" variables then compares to the corresponding "min" value and swaps values where necessary
+for (i in names(ICUMort)){
+  if (substr(i, nchar(i)-2, nchar(i)) == "max"){
+  j <- paste0(substr(i, 1, nchar(i)-4 ),"_min")
+  ICUMort <- maxval(ICUMort, i, j)
+  }
+}
+
+#reassess internal consistency (max vs min values)
+for (i in names(ICUMort)){
+  if (substr(i, nchar(i)-2, nchar(i)) == "max"){
+  j <- paste0(substr(i, 1, nchar(i)-4 ),"_min")
+  print(c(substr(i, 1, nchar(i)-4 ), length(as.matrix(ICUMort[ICUMort[,i]<ICUMort[,j],c(i,j)]))))
+  }
+}
+
+```
+
 #Variables left after incomplete variables removed and variables in SOFA score.
 
 ##Assessable outcome: "in_hospital_death"  
@@ -225,38 +266,26 @@ _SCORES: "SOFA"_
 _SOFA score uses GCS, MAP, Creatinine/Urine, PaO2/FiO2, Bilirubin and Platelets._
 ##Selected Variables: "SOFA" 
 Total number of variables = 12
+  
 
-```{r}
-#remove incomplete variables to maintain data integrity
-ICUMort <- icu_patients_df1[,complete.cases(t(icu_patients_df1))]
-
-#ensure all max and min values are in the right columns
-
-#function to swap values that are inconsistent with allocation
-maxval <- function(df, Max, Min){
-  df[na.omit(df[,Max])<na.omit(df[,Min]),c(Min,Max)] <- unname(df[na.omit(df[,Max])<na.omit(df[,Min]),c(Max,Min)])
-  df
-}
-
-#loop checks for "max" variables then compares to the corresponding "min" value and swaps values where necessary
-for (i in names(ICUMort)){
-  if (substr(i, nchar(i)-2, nchar(i)) == "max"){
-  j <- paste0(substr(i, 1, nchar(i)-4 ),"_min")
-  t.ICUMort <- maxval(ICUMort, i, j)
-  }
-}
+##EDA
+```{r review of selected variables}
 
 #dataframe with selected varialbles only
-ICUMort.f <- ICUMort[,c("SOFA", "Glucose_diff", "WBC_min", "pH_diff", "Albumin_max", "BUN_min", "RespRate_min", "HR_diff", "Na_max", "Age", "Gender", "ICUType", "in_hospital_death")]
+ICUMort.f <- ICUMort[,c("SOFA", "Glucose_diff", "WBC_min", "pH_diff", "Albumin_max", "BUN_min", "RespRate_min", "HR_diff", "Na_max", "GCS_min", "Age", "Gender", "ICUType", "in_hospital_death")]
 
-require("ggplot2")
+summary(ICUMort.f)
+str(ICUMort.f)
+
 library(ggplot2)
+
+for (i in names(ICUMort.f)){
 
 for (i in names(ICUMort.f)){
   if(is.numeric(ICUMort.f[[i]])){
   
     print(ggplot(ICUMort.f, aes(ICUMort.f[[i]])) +
-          geom_histogram(aes(y = ..density.., fill = factor(in_hospital_death, labels = c("No","Yes"))), alpha = .3, bins = 30, position = "identity") +
+          geom_histogram(aes(y = ..density.., fill = factor(in_hospital_death, labels = c("No","Yes"))), alpha = .3, bins = 60, position = "identity") +
           labs(x=i, fill="Died", title = paste0("Density Plot of ", i,", ", length(na.omit(ICUMort.f[[i]]))," values available")))
 
     }else{
@@ -268,6 +297,25 @@ for (i in names(ICUMort.f)){
   }
 
 }
+
+#correlation plot to  explore relationships
+ICUMort.cor <- cor(ICUMort.f[,sapply(ICUMort.f, is.numeric)])
+corrplot(ICUMort.cor,  method = "circle", type = "upper")
+
+#further explore noted correlation between GCS_min and SOFA
+ggplot(ICUMort.f, aes(GCS_min, SOFA, colour = factor(in_hospital_death, labels = c("No","Yes")))) + geom_point() + geom_smooth(method="lm") + labs(colour="Died")
+
+```
+
+
+##Cath
+##Selecting predictor variables for in hostital death
+
+SAPS1 and SOFA seem like obvious choices, as these have been developed as predictors of clinical outcomes (SOFA) and risk of death (SAPS-I).  
+
+Age should also be included, as those who are very young or very old will likely have a higher risk of death.
+
+Include variables from SAPS-I as this has already been verified to correlate with increased risk of death (BUN, GCS, HCO3, HCT, HR, K, Na, RespRate, SysABP, Urine, WBC). Similarly for SOPS (PaO2, Platelets, Bilirubin, Creatinine, GCS).
 
 ```
 
