@@ -183,7 +183,7 @@ We only need to include 5-10ish variables. This is requires a logical approach t
   
 #I would be interested to hear people's thoughts on whether we should use the "diff" variables vs running the values as quadratic term "I(x^2)" instead. I suppose the advantage of "diff" is it is supposed to be the most deranged from the mean in either direction whereas the quadratic term would give us a "U" shaped relationship as opposed to a linear one.  
 
- ```{r variable to be assessed}
+```{r variable to be assessed}
 
 #check which variables have a complete set of data
 ls(icu_patients_df1[,complete.cases(t(icu_patients_df1))])
@@ -270,7 +270,6 @@ Total number of variables = 12
 
 ##EDA
 ```{r review of selected variables}
-
 #dataframe with selected varialbles only
 ICUMort.f <- ICUMort[,c("SOFA", "Glucose_diff", "WBC_min", "pH_diff", "Albumin_max", "BUN_min", "RespRate_min", "HR_diff", "Na_max", "GCS_min", "Age", "Gender", "ICUType", "in_hospital_death")]
 
@@ -278,8 +277,6 @@ summary(ICUMort.f)
 str(ICUMort.f)
 
 library(ggplot2)
-
-for (i in names(ICUMort.f)){
 
 for (i in names(ICUMort.f)){
   if(is.numeric(ICUMort.f[[i]])){
@@ -295,10 +292,10 @@ for (i in names(ICUMort.f)){
           labs(x = i, fill = "Died", title = paste0("Bar Plot of ", i,", ",  length(na.omit(ICUMort.f[[i]])), " values available")))
   
   }
-
 }
 
 #correlation plot to  explore relationships
+library(corrplot)
 ICUMort.cor <- cor(ICUMort.f[,sapply(ICUMort.f, is.numeric)])
 corrplot(ICUMort.cor,  method = "circle", type = "upper")
 
@@ -317,7 +314,6 @@ Age should also be included, as those who are very young or very old will likely
 
 Include variables from SAPS-I as this has already been verified to correlate with increased risk of death (BUN, GCS, HCO3, HCT, HR, K, Na, RespRate, SysABP, Urine, WBC). Similarly for SOPS (PaO2, Platelets, Bilirubin, Creatinine, GCS).
 
-```
 
 
 
