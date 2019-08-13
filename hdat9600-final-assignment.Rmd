@@ -376,11 +376,132 @@ library(survival)
 icu_patients_df0 <- readRDS("icu_patients_df0.rds")
 icu_patients_df1 <- readRDS("icu_patients_df1.rds")
 #View(icu_patients_df1)
-head(icu_patients_df1)
-str(icu_patients_df1)
-summary(icu_patients_df1)
+#head(icu_patients_df1)
+#str(icu_patients_df1)
+#summary(icu_patients_df1)
 
 ```
+##Consideration for variables
+We only need to include 5-10ish variables. This is requires a logical approach to culling. Propose first step is to remove any variables that do not have a full set of data (eg 2061 records). The rationale for this is that if you include variables incomplete variables then if you drop an incomplete variable you may not be able to adequately compare the models. Suggest 1 variable per body system not covered in SOFA score (GCS, MAP, Creatinine/Urine, PaO2/FiO2, Bilirubin, Platelets) as SOFA covers those variables.  
+  
+# Consider using variables used in already validated scores such as SAPSII, APACHE etc. https://www.mdcalc.com/simplified-acute-physiology-score-saps-ii
+# Also we want to use markers which will predict the length of survival. Often a change in these markers is a bad sign - so consider using diff variables more. 
+
+#Variables left after incomplete variables removed and variables in SOFA score.
+
+##Assessable outcome: "in_hospital_death"  
+_Demographics: "Age", "Gender", "ICUType"_
+_Age and sex are demographics important for identifying confounders. Height is missing a lot of values. Is length of stay a predictor or an outcome? Suggest outcome, remove.  Weight can be bad for overweight and underweight._
+##Selected Variables: "Age", "Gender", "ICUType" 
+Total number of variables = 3
+
+_CNS: "Na_diff", "Na_max", "Na_min"_
+_Low sodium worse than high sodium but both bad.   _
+##Selected Variables: "Na_diff"
+Total number of variables = 4
+
+_Cardiovascular: "HR_diff", "HR_max", "HR_min", "K_diff", "K_max", "K_min", "Mg_diff", "Mg_max", "Mg_min", "Temp_diff", "Temp_max", "Temp_min", "TroponinI_diff", "TroponinI_max", "TroponinI_min", "TroponinT_diff", "TroponinT_max", "TroponinT_min"_
+_Troponins are a sign of cardiac ischaemia, which can occur for multiple reasons and would be a poor prognostic indicator. Trop I and T are similar, use Trop I. High temp is a sign of sepsis/infection. K is an electrolyte that often becomes deranged, both high and low are equally bad - use K_diff. HR is bad at both extremes - use HR_diff._
+##Selected Variables: "HR_diff", "K_diff", "Temp_max", "TroponinI_max"
+Total number of variables = 8
+
+_PULMONARY: "PaCO2_diff", "PaCO2_max", "PaCO2_min", "RespRate_diff", "RespRate_max", "RespRate_min", "SaO2_diff", "SaO2_max", "SaO2_min"_
+_These are covered by the SOFA score, which takes into account the PaO2 and whether they are being mechanically ventilated. Leave all of them out.._
+##Selected Variables: none
+Total number of variables = 8
+
+_Renal: "BUN_diff", "BUN_max", "BUN_min"_
+_Good marker of renal impairment, higher is worse._
+##Selected Variables: "BUN_max"
+Total number of variables = 9
+
+_Liver: "Albumin_diff", "Albumin_max", "Albumin_min", "ALP_diff", "ALP_max", "ALP_min", "ALT_diff", "ALT_max", "ALT_min", "AST_diff", "AST_max", "AST_min", "Cholesterol_diff", "Cholesterol_max", "Cholesterol_min"_
+_Low albumin is bad and is a marker of the liver's synthetic ability, however it is covered by the bilirubin measurement. High bilirubin is bad - used in the SOFA score. ALT and ALT are early markers for liver failure and may be an early predictor for mortality - try use ALT_max, (ALT better than AST for most liver issues). Unclear about the role of Cholesterol in critical illness, leave out._
+##Selected Variables: "ALT_max"
+Total number of variables = 10
+
+_METABOLIC/OTHER: "Glucose_diff", "Glucose_max", "Glucose_min", "HCO3_diff", "HCO3_max", "HCO3_min", "Lactate_diff", "Lactate_max", "Lactate_min", "WBC_diff", "WBC_max", "WBC_min", "pH_diff", "pH_max", "pH_min", "HCT_diff", "HCT_max", "HCT_min"  _
+_Glucose is often high at times of acute illness and can be controlled with insulin. Glucose in this setting is probably a poor indicator of comorbid diabetes, leave these out. HCO3 bad if it’s low - use this. High lactate is bad, try use this. WBC marker for infection in both directions, but low <1 is really bad - use this. Low platelets are bad. pH is a good marker of severity of illness, bad in both directions, also related to HCO3 and PaCO2. HCT used in APACHE scoring, low is bad, add this in as well._
+##Selected Variables: "HCO3_min", "Lactate_max", "WBC_min", "pH_diff", "HCT_min"
+Total number of variables = 15
+
+_SCORES: "SOFA"_
+_SOFA score uses GCS, MAP, Creatinine/Urine, PaO2/FiO2, Bilirubin and Platelets._
+##Selected Variables: "SOFA" 
+Total number of variables = 16
+
+Final list of variables:
+"SOFA", "Age", "Gender", "ICUType", "Na_diff", "HR_diff", "K_diff", "Temp_max", "TroponinI_max", "BUN_max", "ALT_max", "HCO3_min", "Lactate_max", "WBC_min", "pH_diff", "HCT_min"
+
+```{r}
+#remove incomplete variables to maintain data integrity
+ICUsurv <- icu_patients_df1[,complete.cases(t(icu_patients_df1))]
+
+#ensure all max and min values are in the right columns
+
+#function to swap values that are inconsistent with allocation
+maxval <- function(df, Max, Min){
+  df[na.omit(df[,Max])<na.omit(df[,Min]),c(Min,Max)] <- unname(df[na.omit(df[,Max])<na.omit(df[,Min]),c(Max,Min)])
+  df
+}
+
+#loop checks for "max" variables then compares to the corresponding "min" value and swaps values where necessary
+for (i in names(ICUsurv)){
+  if (substr(i, nchar(i)-2, nchar(i)) == "max"){
+  j <- paste0(substr(i, 1, nchar(i)-4 ),"_min")
+  t.ICUsurv <- maxval(ICUsurv, i, j)
+  }
+}
+
+#dataframe with selected varialbles only
+ICUsurv.f <- ICUsurv[,c("SOFA", "Age", "Gender", "ICUType", "Na_diff", "HR_diff", "K_diff", "Temp_max", "TroponinI_max", "BUN_max", "ALT_max", "HCO3_min", "Lactate_max", "WBC_min", "pH_diff", "HCT_min", "in_hospital_death", "Status", "Days")]
+
+require("ggplot2")
+library(ggplot2)
+
+for (i in names(ICUsurv.f)){
+  if(is.numeric(ICUsurv.f[[i]])){
+  
+    print(ggplot(ICUsurv.f, aes(ICUsurv.f[[i]])) +
+          geom_histogram(aes(y = ..density.., fill = factor(in_hospital_death, labels = c("No","Yes"))), alpha = .3, bins = 30, position = "identity") +
+          labs(x=i, fill="Died", title = paste0("Density Plot of ", i,", ", length(na.omit(ICUsurv.f[[i]]))," values available")))
+
+    }else{
+
+    print(ggplot(ICUsurv.f, aes(ICUsurv.f[[i]], fill=factor(in_hospital_death, labels = c("No", "Yes")))) +
+          geom_bar(position = "fill") +
+          labs(x = i, fill = "Died", title = paste0("Bar Plot of ", i,", ",  length(na.omit(ICUsurv.f[[i]])), " values available")))
+  
+  }
+
+}
+
+
+```
+
+```{r 2c}
+
+
+
+
+vars_2 <- c("SOFA", "Age", "Gender", "ICUType", "Na_diff", "HR_diff", "K_diff", "Temp_max", "TroponinI_max", "BUN_max", "ALT_max", "HCO3_min", "Lactate_max", "WBC_min", "pH_diff", "HCT_min")
+
+#making formulas
+univ_formulas <- sapply(vars_2, function(x)as.formula(paste('Surv(Days,Status)~',x))
+)
+#making a list of models
+univ_models <- lapply(univ_formulas, function(x){coxph(x,data=ICUsurv.f)})
+
+#Create a list of univariate Cox PH models for each of the variables selected
+#formulas2<- paste0("Surv(Days, Status) ~ ", vars_2)
+#unicox_list <- lapply(formulas2, coxph, data = t.ICUsurv)
+#summary(unicox_list)
+
+
+univ_results <- lapply(univ_models, function(x){summary(x)})
+univ_results
+```
+
 
 ### Task 2 Part1.b
 The categorical variables in the dataset that may be associated with a person’s survival are:
