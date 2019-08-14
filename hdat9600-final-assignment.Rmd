@@ -398,7 +398,7 @@ unimod_odds
 #pH diff has the largest effect, others increase odds by between ~2 -15 %, most around 2.  Albumin_max decreases odds by ~ 38%.
 
 #Check interactions from EDA
-var_int_selection <- c("Glucose_diff:Gender", "BUN_min:Gender", "RespRate_min:Gender", "Bilirubin_min:Gender", "BUN_min:ICUType", "PaO2_max:ICUType", "Bilirubin_min:ICUType", "GCS_max:ICUType")
+var_int_selection <- c("Glucose_diff:Gender", "BUN_min:Gender", "RespRate_min:Gender", "Bilirubin_min:Gender", "pH_diff:Gender", "BUN_min:ICUType", "PaO2_max:ICUType", "Bilirubin_min:ICUType", "GCS_max:ICUType", "Age:ICUType")
 formulas_int<- paste('in_hospital_death ~', var_int_selection)
 unimod_int_list <- lapply(formulas, glm, family = binomial(), data = ICUMort.f)
 unimod_int_summ <- lapply(unimod_int_list, summary)
@@ -412,6 +412,13 @@ full_mod<-glm(in_hospital_death ~ Glucose_diff + WBC_min + pH_diff +
                 Albumin_max + BUN_min + RespRate_min + MAP_max + Na_max + GCS_Max +
                 Age + Gender + ICUType, family = binomial(), data = ICUMort.f)
 summary(full_mod)
+
+#Interactions model from above based on EDA
+int_mod<-glm(in_hospital_death ~ Age:Gender + Glucose_diff:Gender + BUN_min:Gender + 
+              RespRate_min:Gender + Bilirubin_min:Gender + pH_diff:Gender + BUN_min:ICUType + 
+              PaO2_max:ICUType + Bilirubin_min:ICUType + GCS_max:ICUType + Age:ICUType, 
+              family = binomial(), data = ICUMort.f)
+summary(int_mod)
 
 #Full model with interactions
 full_mod_int <-glm(in_hospital_death ~ Glucose_diff + WBC_min + pH_diff +
@@ -450,10 +457,127 @@ summary(red_mod)
 anova(full_mod,red_mod, test = "Chisq")
 #No significant difference, so acceptable to use the simpler model.
 
-#models fit for task: full model, reduced full model, full interaction model, reduced interation model, null model
+#models fit for task: full model, interaction model, full interaction model, reduced full model, reduced interaction model, reduced full interaction model, statistically significant full model,  null model
 ```
 _will include some commentary on these results_
 
+
+```{r, multivariate models}
+#Include all variables from above
+full_mod<-glm(in_hospital_death ~ Glucose_diff + WBC_min + pH_diff +
+                Bilirubin_min + BUN_min + RespRate_min + MAP_max + Na_max + GCS_max +
+                Age + Gender + ICUType, family = binomial(), data = ICUMort.f)
+summary(full_mod)
+#check statistically significant values
+# coef.df <- as.data.frame(summary(full_mod)$coefficients)
+# as.matrix(coef.df[coef.df$`Pr(>|z|)`<0.05,])
+#pH_diff, Bilirubin_min, BUN_min, Na_max, GCS_max, Age, ICUType
+
+#create statistically significant model
+sig_full_mod<-glm(in_hospital_death ~ pH_diff + Bilirubin_min + BUN_min + Na_max + 
+                    GCS_max + Age + ICUType, family = binomial(), data = ICUMort.f)
+summary(sig_full_mod)
+
+#compare full with statistically significant for anova and AIC
+anova(full_mod, sig_full_mod, test = "Chisq")
+full_mod$aic
+sig_full_mod$aic
+#test not significant, AIC lower for sig model, we can accept the simpler model
+
+#Interactions model from above
+int_mod<-glm(in_hospital_death ~ Age:Gender + Glucose_diff:Gender + BUN_min:Gender + RespRate_min:Gender + Bilirubin_min:Gender + pH_diff:Gender + BUN_min:ICUType + PaO2_max:ICUType + Bilirubin_min:ICUType + GCS_max:ICUType + Age:ICUType, family = binomial(), data = ICUMort.f)
+summary(int_mod)
+#check statistically significant values
+# coef.df <- as.data.frame(summary(int_mod)$coefficients)
+# as.matrix(coef.df[coef.df$`Pr(>|z|)`<0.05,])
+#Age:Gender, BUN_min:Gender, pH_diff:Gender, BUN_min:ICUType, PaO2_max:ICUType, GCS_max:ICUType
+#create statistically significant model
+sig_int_mod<-glm(in_hospital_death ~ Age:Gender + BUN_min:Gender + pH_diff:Gender + BUN_min:ICUType + 
+                   PaO2_max:ICUType + GCS_max:ICUType, family = binomial(), data = ICUMort.f)
+summary(sig_int_mod)
+
+#compare full with statistically significant for anova and AIC
+anova(int_mod, sig_int_mod, test = "Chisq")
+int_mod$aic
+sig_int_mod$aic
+#test statistically significant, AIC lower for int model, reject null hypothesis and keep original model
+
+#Full model with interactions
+full_int_mod <-glm(in_hospital_death ~ Glucose_diff + WBC_min + pH_diff +
+                Bilirubin_min + BUN_min + RespRate_min + MAP_max + Na_max + GCS_max +
+                Age + Gender + ICUType + Glucose_diff:Gender + BUN_min:Gender + 
+                RespRate_min:Gender + Bilirubin_min:Gender + BUN_min:ICUType + PaO2_max:ICUType +
+                Bilirubin_min:ICUType + GCS_max:ICUType + Age:Gender, family = binomial(), data = ICUMort.f)
+summary(full_int_mod)
+#check statistically significant values
+# coef.df <- as.data.frame(summary(full_int_mod)$coefficients)
+# as.matrix(coef.df[coef.df$`Pr(>|z|)`<0.05,])
+#pH_diff, BUN_min, Na_max, GCS_max, Age, ICUType, Gender, Age:Gender, PaO2_max:ICUType, GCS_max:ICUType
+
+#create statistically significant model at 0.1
+sig_full_int_mod<-glm(in_hospital_death ~ pH_diff + BUN_min + Na_max + GCS_max + RespRate_min + BUN_min:ICUType +
+                Age + Gender + ICUType + PaO2_max:ICUType + GCS_max:ICUType + Age:Gender,
+                family = binomial(), data = ICUMort.f)
+summary(sig_full_int_mod)
+
+#compare full with statistically significant for anova and AIC
+anova(full_int_mod, sig_full_int_mod, test = "Chisq")
+int_mod$aic
+sig_int_mod$aic
+#test statistically significant, AIC lower for full int model, reject null hypothesis and keep original model
+
+#check full models against stepwise removal of variables
+red_full_mod <- step(full_mod, trace = 0)
+red_int_mod <- step(int_mod, trace = 0)
+red_full_int_mod <- step(full_int_mod, trace = 0)
+
+#compare stepwise reduced models chosen models
+anova(sig_full_mod, red_full_mod, test = "Chisq")
+sig_full_mod$aic
+red_full_mod$aic
+#models are exactly the same, keep sig_full_mod
+
+anova(int_mod, red_int_mod, test = "Chisq")
+int_mod$aic
+red_int_mod$aic
+summary(int_mod)
+summary(red_int_mod)
+#test not statistically significant, AIC lower for reduced model, use reduced model
+#additional note - bilirubin:gender, resprate:gender and glucose:gender removed in stepwise reduction
+
+anova(full_int_mod, red_full_int_mod, test = "Chisq")
+full_int_mod$aic
+red_full_int_mod$aic
+#test not statistically significant, AIC lower for reduced model, use reduced model
+#additional note - WBC_min, RespRate_min, MAP_max, Glucose_diff:Gender, BUN_min:Gender, RespRate_min:Gender, Bilirubin_min:Gender and Bilirubin_min:ICUType removed in stepwise reduction
+
+
+#Compare chosen models to a null model
+null_mod <- glm(in_hospital_death ~ 1, family = binomial, data = ICUMort.f)
+anova(sig_full_mod, null_mod, test = "Chisq")
+anova(red_int_mod, null_mod, test = "Chisq")
+anova(red_full_int_mod, null_mod, test = "Chisq")
+#All tests statistically significant - Reject null hypothesis of no relationship between predictors and outcome for all models
+
+#compare chosen models
+anova(sig_full_mod, red_int_mod, test = "Chisq")
+sig_full_mod$aic
+red_int_mod$aic
+anova(sig_full_mod, red_full_int_mod, test = "Chisq")
+sig_full_mod$aic
+red_full_int_mod$aic
+anova(red_int_mod, red_full_int_mod, test = "Chisq")
+an$`Pr(>Chi)`
+red_int_mod$aic
+red_full_int_mod$aic
+#all tests statistically significant, can not reject null hypothesis, AIC improved on reduced models, 
+#unable to compare interaction models due to not enough degrees of freedom, 
+#p-value more significant for reduced full interaction model and AIC lower that both other models
+#can we rationalise the variables???
+
+#models for further analysis - sig_full_mod, red_int_mod, red_full_int_mod
+
+```
 Next step is to examine the goodness of fit, and model assumptions.
 
 ```{r, Task1, goodness of fit}
