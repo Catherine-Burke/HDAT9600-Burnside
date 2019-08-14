@@ -611,6 +611,73 @@ PseudoR2(full_mod, which = "all")
 PseudoR2(null_mod, which = "all")
 #Relatively small proportion of variance explained, but a lot more than the null model.
 ```
+```{r, Task1, goodness of fit - JASON}
+
+#possible models - sig_full_mod, red_int_mod, red_full_int_mod
+
+#Calculate the Hosmer-Lemeshow statistic
+#linear predictors
+library(ResourceSelection)
+#Vector of predicted probabilities
+pred_mod1 <- predict(sig_full_mod, type = "response")
+hl_mod1 <- hoslem.test(sig_full_mod$y, pred_mod1, g=80)
+hl_mod1
+#No indication of a lack of fit as p > 0.05.
+
+pred_mod2 <- predict(red_int_mod, type = "response")
+hl_mod2 <- hoslem.test(red_int_mod$y, pred_mod2, g=80)
+hl_mod2
+#No indication of a lack of fit as p > 0.05.
+
+pred_mod3 <- predict(red_full_int_mod, type = "response")
+hl_mod3 <- hoslem.test(red_full_int_mod$y, pred_mod3, g=80)
+hl_mod3
+#No indication of a lack of fit as p > 0.05.
+
+pred_null <- predict(null_mod, type = "response")
+hl_null <- hoslem.test(null_mod$y, pred_mod3, g=80)
+hl_null
+
+#Compare brier scores
+bs_mod1 <- mean((pred_mod1 - ICUMort.f$in_hospital_death)^2)
+bs_mod1
+bs_mod2 <- mean((pred_mod2 - ICUMort.f$in_hospital_death)^2)
+bs_mod2
+bs_mod3 <- mean((pred_mod3 - ICUMort.f$in_hospital_death)^2)
+bs_mod3
+bc_null <- mean((pred_null - ICUMort.f$in_hospital_death)^2)
+bc_null
+#Almost the same, more parsimonious model acceptible - red_int_mod??
+
+#Brier score indicates that the reduced and full models are better than the null, but nor by a huge degree.
+#PseudoR2
+library(DescTools)
+#PsuedoR2 models under question
+a <- t(PseudoR2(sig_full_mod, which = "all"))
+b <- t(PseudoR2(red_int_mod, which = "all"))
+c <- t(PseudoR2(red_full_int_mod, which = "all"))
+d <- t(PseudoR2(null_mod, which = "all"))
+
+#turn into table for easier interpretation
+psudortbl <- rbind(a,b,c,d)
+rownames(psudortbl) <- c("sig_full_mod", "red_int_mod", "red_full_int_mod", "null_mod")
+#round values for output
+round(psudortbl,4)
+
+#just for fun...
+ICUMort.f %>% mutate(predprob=predict(red_full_int_mod, type="response")) -> ICUMort.f
+par(pty="s")
+plot.roc(ICUMort.f$in_hospital_death, ICUMort.f$predprob, identity.col="black", legacy.axes=TRUE,
+    auc.polygon = TRUE, auc.polygon.col=rgb(.9,0.1,0.1, alpha = 0.3), col="red")
+
+ICUMort.f %>% mutate(predprob=predict(red_int_mod, type="response")) -> ICUMort.f
+plot.roc(ICUMort.f$in_hospital_death, ICUMort.f$predprob, identity.col="black", legacy.axes=TRUE,
+    auc.polygon = TRUE, auc.polygon.col=rgb(.1,0.1,0.9, alpha = 0.3),add=TRUE, col="blue")
+
+ICUMort.f %>% mutate(predprob=predict(sig_full_mod, type="response")) -> ICUMort.f
+plot.roc(ICUMort.f$in_hospital_death, ICUMort.f$predprob, identity.col="black", legacy.axes=TRUE,
+    auc.polygon = TRUE, auc.polygon.col=rgb(.1,0.9,0.1, alpha = 0.3),add=TRUE, col="green")
+```
 
 ##Goodness of fit
 Both the full and reduced model explain more variation than the null model, but it is a relatively small amount of the variance (McFadden ~0.17).  No evidence of a lack of fit from the Hosmer-Lemeshow statistic, and Brier scores are lower (i.e. better) for both full ad reduced model compared to the null.  Not a huge difference between the full and reduced models.
