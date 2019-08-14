@@ -461,7 +461,7 @@ anova(full_mod,red_mod, test = "Chisq")
 ```
 _will include some commentary on these results_
 
-
+###Jason multivariate
 ```{r, multivariate models}
 #Include all variables from above
 full_mod<-glm(in_hospital_death ~ Glucose_diff + WBC_min + pH_diff +
@@ -591,14 +591,14 @@ hl <- hoslem.test(red_mod$y, pred, g=80)
 hl
 #No indication of a lack of fit as p > 0.05.
 #Create Brier score
-bs <- mean((pred - ICUMort$in_hospital_death)^2)
+bs <- mean((pred - ICUMort.f$in_hospital_death)^2)
 bs
 #Compare to full model
-bs_full <- mean((predict(full_mod, type = "response") - ICUMort$in_hospital_death)^2)
+bs_full <- mean((predict(full_mod, type = "response") - ICUMort.f$in_hospital_death)^2)
 bs_full
 #Almost the same, more parsimonious model acceptible
 #Compare to null model
-bc_null <- mean((predict(null_mod, type = "response") - ICUMort$in_hospital_death)^2)
+bc_null <- mean((predict(null_mod, type = "response") - ICUMort.f$in_hospital_death)^2)
 bc_null
 #Brier score indicates that the reduced and full models are better than the null, but nor by a huge degree.
 #PseudoR2
