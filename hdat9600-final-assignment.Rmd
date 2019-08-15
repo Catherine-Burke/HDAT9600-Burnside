@@ -501,7 +501,35 @@ univ_models <- lapply(univ_formulas, function(x){coxph(x,data=ICUsurv.f)})
 univ_results <- lapply(univ_models, function(x){summary(x)})
 univ_results
 ```
+TroponinI_max is clearly not significant - remove.
+HCT_min also not significant. Also this is related to pH - remove.
+Leave others in for now. 
 
+```{r}
+
+cox.multi <- coxph(Surv(Days,Status) ~ SOFA + Age + Gender + ICUType + Na_diff + HR_diff + K_diff + Temp_max + BUN_max + ALT_max + Lactate_max + WBC_min + pH_diff + HCT_min, data=ICUsurv.f)
+
+summary(cox.multi)
+
+
+
+```
+
+```{r}
+
+cox.s1 <- step(cox.multi)
+summary(cox.s1)
+
+
+
+```
+
+
+
+
+
+
+# Yalin's code #
 
 ### Task 2 Part1.b
 The categorical variables in the dataset that may be associated with a person’s survival are:
@@ -711,6 +739,7 @@ print(anova(cox.mv2, cox.mv3))
 extractAIC(cox.mv1)
 extractAIC(cox.mv2)
 extractAIC(cox.mv3)
+extractAIC(cox.multi)
 
 # Higher (worse) AIC for the cox.mv3 model
 
