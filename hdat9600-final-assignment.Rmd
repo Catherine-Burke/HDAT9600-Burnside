@@ -724,6 +724,11 @@ ROC(predict(unimod_list[[1]], type = "response"), oc, plot = "ROC")
 
 I wonder if we should try to include SAPS1 with missing rows removed from the entire dataset - would mean loosing 96 of 2061.  Could also try adding other variables ruled out above to the model to see if we get a better fit.
 
+
+
+
+
+
 # Task 2 (15 marks)
 
 In this task, you are required to develop a Cox proportional hazards survival model using the `icu_patients_df1` data set which adequately explains or predicts the length of survival indicated by the `Days` variable, with censoring as indicated by the `Status` variable.  You should fit a series of models, maybe three or four, evaluating each one, before you present your final model. Your final model should **not** include all the predictor variables, just a small subset of them, which you have selected based on statistical significance and/or background knowledge. Aim for between five and ten predictor variables (slightly more or fewer is OK). It is perfectly acceptable to include predictor variables in your final model which are not statistically significant, as long as you justify their inclusion on medical or physiological grounds (you will not be marked down if your medical justification is not exactly correct, but do you best). You should assess each model you consider for goodness of fit and other relevant statistics, and you should assess your final model for violations of assumptions and perform other diagnostics which you think are relevant (and modify the model if indicated, or at comment on the possible impact of what your diagnostics show). Finally, re-fit your final model to the unimputed data frame (`icu_patients_df0.rds`) and comment on any differences you find.
@@ -763,6 +768,12 @@ icu_patients_df1 <- readRDS("icu_patients_df1.rds")
 #summary(icu_patients_df1)
 
 ```
+
+
+
+
+# KD code
+
 ##Consideration for variables
 We only need to include 5-10ish variables. This is requires a logical approach to culling. Propose first step is to remove any variables that do not have a full set of data (eg 2061 records). The rationale for this is that if you include variables incomplete variables then if you drop an incomplete variable you may not be able to adequately compare the models. Suggest 1 variable per body system not covered in SOFA score (GCS, MAP, Creatinine/Urine, PaO2/FiO2, Bilirubin, Platelets) as SOFA covers those variables.  
   
