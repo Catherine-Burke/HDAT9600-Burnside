@@ -1122,6 +1122,13 @@ summary(cox.mv2)
 ```
 
 ### Task 2 Part6
+
+
+Using semi-parametric methods:
+advantage of Cox Proportional Hazards regression:
+fit survival models without assuming the distribution
+
+
 ```{r Taks2_Part6.a}
 # diagnostic statistics
 # graphical diagnostic
@@ -1134,6 +1141,9 @@ prop.mv1
 library("survminer")
 ggcoxzph(prop.mv1)
 
+# interpretation of the graph in its most simplest way is how curved it is: 
+# if it is fairly flat, the assumption of proportionality is not (much) violated
+
 ```
 
 The output from the proportional hazards test shows that the test is statistically significant (p-value < 0.05) for ALP_max, ALP_min, Urine_diff, and Urine_max variable. The global test is also statistically significant (p-value = 1.52e-04). 
@@ -1145,7 +1155,9 @@ violates the PH assumption, resulting in strong evidence of non-proportional haz
 
 
 
-```{r Taks2_Part6.b}
+
+
+```{r}
 # assume that continuous covariates have a linear form
 
 # plot the Martingale residuals against continuous covariates can be used to detect nonlinearity 
@@ -1162,7 +1174,46 @@ ggcoxfunctional(Surv(Days, Status) ~ Urine_diff + log(Urine_diff) + sqrt(Urine_d
 
 
 
-```{r Taks2_Part6.b}
+```{r}
+# relative importance of covariates:
+# rank the covariate values and plot relative hazard against ranks
+
+# relative hazard is scaled to the reference hazard
+# reference hazard is related to the median of covariates
+# relative hazard can vary depending on the distribution of covariate values in a population
+
+
+library("rankhazard")
+cox.mv2 <- coxph(Surv(Days, Status) ~ ALP_max + ALP_min + Cholesterol_min + Creatinine_max + Creatinine_min + MAP_diff  + NIMAP_min + pH_min + Urine_diff + Urine_max, data = icu_patients_df1, na.action=na.omit, x=TRUE)
+
+rankhazardplot(cox.mv2, data= icu_patients_df1)
+
+
+
+# horizontal axis: the minimum, first quartile, median, third quartile and maximum values of each covariate are reported
+
+```
+
+
+```{r}
+# Hazard ratio curves for continuous predictors:
+# Cox proportional hazards model assumes that the continuous predictors are in linear association with log-hazard
+
+# relationship between continuous predictor and hazard ratio helps investigators to check for the linearity assumption
+
+library("splines")
+library("smoothHR")
+
+cox.mv2 <- coxph(Surv(Days, Status) ~ ALP_max + ALP_min + Cholesterol_min + Creatinine_max + Creatinine_min + MAP_diff  + NIMAP_min + pH_min + Urine_diff + Urine_max, data = icu_patients_df1, na.action=na.omit, x=TRUE)
+
+hrplot <- smoothHR(data = icu_patients_df1, coxfit = cox.mv2)
+
+plot(hrplot, predictor= "Creatinine_max", prob = 0, conf.level = 0.95)
+
+```
+
+
+```{r}
 
 # plots the estimated changes in the regression coefficients upon deleting each observation in turn
 ggcoxdiagnostics(cox.mv2, type = "dfbeta",
@@ -1177,10 +1228,32 @@ ggcoxdiagnostics(cox.mv2, type = "deviance",
 
 
 
-```{r Taks2_Part6.c}
-fit <-aareg(Surv(Days, Status) ~ ALP_max + ALP_min + Cholesterol_min + Creatinine_max + Creatinine_min + MAP_diff  + NIMAP_min + pH_min + Urine_diff + Urine_max, data = icu_patients_df1, na.action=na.omit)
+```{r}
+# Parametric methods:
 
-fit
+
+w.mv1 <- eha::phreg(Surv(Days, Status) ~ ALP_max + ALP_min + Cholesterol_min + Creatinine_max + Creatinine_min + MAP_diff  + NIMAP_min + pH_min + Urine_diff + Urine_max, data = icu_patients_df1, na.action=na.omit)
+plot(w.mv1)
+
+pch800.mv1 <- eha::phreg(Surv(Days, Status) ~ ALP_max + ALP_min + Cholesterol_min + Creatinine_max + Creatinine_min + MAP_diff  + NIMAP_min + pH_min + Urine_diff + Urine_max, data = icu_patients_df1, na.action=na.omit, dist = "pch", cuts = c(800))
+
+pch1800.mv1 <- eha::phreg(Surv(Days, Status) ~ ALP_max + ALP_min + Cholesterol_min + Creatinine_max + Creatinine_min + MAP_diff  + NIMAP_min + pH_min + Urine_diff + Urine_max, data = icu_patients_df1, na.action=na.omit, dist = "pch", cuts = c(1800))
+
+
+
+mll.mv1 <- c(w.mv1$loglik[2], pch800.mv1$loglik[2], pch1800.mv1$loglik[2])
+names(mll.mv1) <- c("w", "pch800", "pch1800")
+mll.mv1
+
+# The largest value is the best. 
+
+cox.mv2 <- eha::coxreg(Surv(Days, Status) ~ ALP_max + ALP_min + Cholesterol_min + Creatinine_max + Creatinine_min + MAP_diff  + NIMAP_min + pH_min + Urine_diff + Urine_max, data = icu_patients_df1, na.action=na.omit)
+
+# check graphical goodness-of-fit test
+eha::check.dist(cox.mv2, w.mv1)
+eha::check.dist(cox.mv2, pch800.mv1)
+eha::check.dist(cox.mv2, pch1800.mv1)
+
 
 ```
 
