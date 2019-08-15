@@ -182,56 +182,24 @@ library(tidyverse)
 We only need to include 5-10ish variables. This is requires a logical approach to culling. Propose first step is to remove any variables that do not have a full set of data (eg 2061 records). The rationale for this is that if you include variables incomplete variables then if you drop an incomplete variable you may not be able to adequately compare the models. Suggest 1 variable per body system not covered in SOFA score (GCS, MAP, Creatinine/Urine, PaO2/FiO2, Bilirubin, Platelets) as SOFA covers those variables.  
   
 #I would be interested to hear people's thoughts on whether we should use the "diff" variables vs running the values as quadratic term "I(x^2)" instead. I suppose the advantage of "diff" is it is supposed to be the most deranged from the mean in either direction whereas the quadratic term would give us a "U" shaped relationship as opposed to a linear one.  
-  
-#Variables left after incomplete variables removed and variables in SOFA score.
 
-##Assessable outcome: "in_hospital_death"  
-_Demographics: "Age", "Gender", "ICUType"_
-_Age and sex are demographics important for identifying confounders. Height is missing a lot of values. Is length of stay a predictor or an outcome? Suggest outcome, remove.  Weight can be bad for overweight and underweight._
-##Selected Variables: "Age", "Gender", "ICUType" 
-Total number of variables = 3
+ ```{r variable to be assessed}
 
-_CNS: "Na_diff", "Na_max", "Na_min"_
-_Low sodium worse than high sodium but both bad. _
-##Selected Variables: "Na_max" 
-Total number of variables = 4
+#check which variables have a complete set of data
+ls(icu_patients_df1[,complete.cases(t(icu_patients_df1))])
 
-_Cardiovascular: "HR_diff", "HR_max", "HR_min", "K_diff", "K_max", "K_min", "Mg_diff", "Mg_max", "Mg_min", "Temp_diff", "Temp_max", "Temp_min", "TroponinI_diff", "TroponinI_max", "TroponinI_min", "TroponinT_diff", "TroponinT_max", "TroponinT_min"_
-_TroponinI is the value that is routinely checked for patient's who present with chest pain/MI but there’s likely only a small proportion of admissions this would be abnormal in. Temp is bad if high or low, can be a marker for infection. Likely WBC will be better. HR bad if too high or too low, marker for SIRS. Unsure about usefulness of including electrolytes (K, Mg) as they are quite modifiable, leave out._
-##Selected Variables: "HR_diff"
-Total number of variables = 5
-
-_PULMONARY: "PaCO2_diff", "PaCO2_max", "PaCO2_min", "RespRate_diff", "RespRate_max", "RespRate_min", "SaO2_diff", "SaO2_max", "SaO2_min"_
-_PaCO2 can be bad low and high but is also easily modified, leave out. Respiratory rate bad if low or high but likely to be worse in ICU if high. SaO2 just a different measure of arterial oxygenation, already covered in SOFA._
-##Selected Variables: "RespRate_min"
-Total number of variables = 6
-
-_Renal: "BUN_diff", "BUN_max", "BUN_min"_
-_All values are good markers of acute kidney injury or chronic kidney disease which both have a higher than average mortality rate._
-##Selected Variables: "BUN_min"
-Total number of variables = 7
-
-_Liver: "Albumin_diff", "Albumin_max", "Albumin_min", "ALP_diff", "ALP_max", "ALP_min", "ALT_diff", "ALT_max", "ALT_min", "AST_diff", "AST_max", "AST_min", "Cholesterol_diff", "Cholesterol_max", "Cholesterol_min"_
-_Low albumin is bad. High bilirubin is bad. ALT and ALT are supportive markers for liver failure but this is adequately covered by bilirubin. Unclear about the role of Cholesterol in critical illness, leave out._
-##Selected Variables: "Albumin_max"
-Total number of variables = 8
-
-_METABOLIC/OTHER: "Glucose_diff", "Glucose_max", "Glucose_min", "HCO3_diff", "HCO3_max", "HCO3_min", "Lactate_diff", "Lactate_max", "Lactate_min", "WBC_diff", "WBC_max", "WBC_min", "pH_diff", "pH_max", "pH_min", "HCT_diff", "HCT_max", "HCT_min"  _
-_Glucose bad if low or high, diabetes also a high mortaility comorbidity in ICU. HCO3 bad if it’s low. High lactate is bad. WBC marker for infection in both directions. Low platelets are bad. pH is a good marker of severity of illness, bad in both directions, also related to HCO3 and PaCO2. It’s unclear to me if HCT is a marker for mortality._
-##Selected Variables: "Glucose_diff", "WBC_min", "pH_diff"
-Total number of variables = 11
-
-_SCORES: "SOFA"_
-_SOFA score uses GCS, MAP, Creatinine/Urine, PaO2/FiO2, Bilirubin and Platelets._
-##Selected Variables: "SOFA" 
-Total number of variables = 12
-
-```{r}
 #remove incomplete variables to maintain data integrity
 ICUMort <- icu_patients_df1[,complete.cases(t(icu_patients_df1))]
 
-#ensure all max and min values are in the right columns
+#check data for internal consistency (max vs min values)
+for (i in names(ICUMort)){
+  if (substr(i, nchar(i)-2, nchar(i)) == "max"){
+  j <- paste0(substr(i, 1, nchar(i)-4 ),"_min")
+  print(c(substr(i, 1, nchar(i)-4 ), length(as.matrix(ICUMort[ICUMort[,i]<ICUMort[,j],c(i,j)]))))
+  }
+}
 
+#ensure all max and min values are in the right columns
 #function to swap values that are inconsistent with allocation
 maxval <- function(df, Max, Min){
   df[na.omit(df[,Max])<na.omit(df[,Min]),c(Min,Max)] <- unname(df[na.omit(df[,Max])<na.omit(df[,Min]),c(Max,Min)])
@@ -242,21 +210,88 @@ maxval <- function(df, Max, Min){
 for (i in names(ICUMort)){
   if (substr(i, nchar(i)-2, nchar(i)) == "max"){
   j <- paste0(substr(i, 1, nchar(i)-4 ),"_min")
-  t.ICUMort <- maxval(ICUMort, i, j)
+  ICUMort <- maxval(ICUMort, i, j)
   }
 }
 
-#dataframe with selected varialbles only
-ICUMort.f <- ICUMort[,c("SOFA", "Glucose_diff", "WBC_min", "pH_diff", "Albumin_max", "BUN_min", "RespRate_min", "HR_diff", "Na_max", "Age", "Gender", "ICUType", "in_hospital_death")]
+#reassess internal consistency (max vs min values)
+for (i in names(ICUMort)){
+  if (substr(i, nchar(i)-2, nchar(i)) == "max"){
+  j <- paste0(substr(i, 1, nchar(i)-4 ),"_min")
+  print(c(substr(i, 1, nchar(i)-4 ), length(as.matrix(ICUMort[ICUMort[,i]<ICUMort[,j],c(i,j)]))))
+  }
+}
 
-require("ggplot2")
-library(ggplot2)
+#SOFA has a negative value - investigate (check for consistency with scoring against GCS, MAP, Creatinine/Urine, PaO2/FiO2, Bilirubin and Platelets)
+icu_patients_df1[icu_patients_df1$SOFA<1,c("SOFA", "PaO2_min", "FiO2_max", "Bilirubin_max", "GCS_min", "Creatinine_max", "Urine_max", "Platelets_min", "MAP_min")]
+#wild variation in score relative to variables in -1 and 0, leave out
+
+
+```
+  
+#I would be interested to hear people's thoughts on whether we should use the "diff" variables vs running the values as quadratic term "I(x^2)" instead. I suppose the advantage of "diff" is it is supposed to be the most deranged from the mean in either direction whereas the quadratic term would give us a "U" shaped relationship as opposed to a linear one.
+  
+#Variables left after incomplete variables removed and variables in SOFA score.
+
+##Assessable outcome: "in_hospital_death"  
+  
+_Demographics: "Age", "Gender", "ICUType"_
+_Age and sex are demographics important for identifying confounders. Height is missing a lot of values. Is length of stay a predictor or an outcome? Suggest outcome, remove.  Weight can be bad for overweight and underweight._
+##Selected Variables: "Age", "Gender", "ICUType" 
+Total number of variables = 3
+
+_CNS: "Na_diff", "Na_max", "Na_min"_
+_Low sodium worse than high sodium but both bad. Sodium not a clear neurological prognosticator, include GCS._
+##Selected Variables: "Na_max", "GCS_max"
+Total number of variables = 5
+
+_Cardiovascular: "HR_diff", "HR_max", "HR_min", "K_diff", "K_max", "K_min", "Mg_diff", "Mg_max", "Mg_min", "Temp_diff", "Temp_max", "Temp_min", "TroponinI_diff", "TroponinI_max", "TroponinI_min", "TroponinT_diff", "TroponinT_max", "TroponinT_min"_
+_TroponinI is the value that is routinely checked for patient's who present with chest pain/MI but there’s likely only a small proportion of admissions this would be abnormal in. Temp is bad if high or low, can be a marker for infection. Likely WBC will be better. HR bad if too high or too low, marker for SIRS. Unsure about usefulness of including electrolytes (K, Mg) as they are quite modifiable, leave out. Initially left out MAP because of it's included in SOFA but now not using SOFA, use MAP over HR as marker of CVS failure._
+##Selected Variables: "MAP_max"
+Total number of variables = 6
+
+_Respiratory: "PaCO2_diff", "PaCO2_max", "PaCO2_min", "RespRate_diff", "RespRate_max", "RespRate_min", "SaO2_diff", "SaO2_max", "SaO2_min"_
+_PaCO2 can be bad low and high but is also easily modified, leave out. Respiratory rate bad if low or high but likely to be worse in ICU if high. SOFA score no good, use PaO2. Lower is worse._
+##Selected Variables: "RespRate_min", "PaO2_max"
+Total number of variables = 8
+
+_Renal: "BUN_diff", "BUN_max", "BUN_min"_
+_All values are good markers of acute kidney injury or chronic kidney disease which both have a higher than average mortality rate._
+##Selected Variables: "BUN_min"
+Total number of variables = 9
+
+_Liver: "Albumin_diff", "Albumin_max", "Albumin_min", "ALP_diff", "ALP_max", "ALP_min", "ALT_diff", "ALT_max", "ALT_min", "AST_diff", "AST_max", "AST_min", "Cholesterol_diff", "Cholesterol_max", "Cholesterol_min"_
+_Low albumin is bad. High bilirubin is bad. ALT and ALT are supportive markers for liver failure but this is adequately covered by bilirubin. Unclear about the role of Cholesterol in critical illness, leave out. Was using SOFA originally but now not. Use bilirubin as marker of liver failure._
+##Selected Variables: "Bilirubin_min"
+Total number of variables = 10
+
+_Metabolic/Other: "Glucose_diff", "Glucose_max", "Glucose_min", "HCO3_diff", "HCO3_max", "HCO3_min", "Lactate_diff", "Lactate_max", "Lactate_min", "WBC_diff", "WBC_max", "WBC_min", "pH_diff", "pH_max", "pH_min", "HCT_diff", "HCT_max", "HCT_min"  _
+_Glucose bad if low or high, diabetes also a high mortaility comorbidity in ICU. HCO3 bad if it’s low. High lactate is bad. WBC marker for infection in both directions. Low platelets are bad. pH is a good marker of severity of illness, bad in both directions, also related to HCO3 and PaCO2. It’s unclear to me if HCT is a marker for mortality._
+##Selected Variables: "Glucose_diff", "WBC_min", "pH_diff"
+Total number of variables = 13
+
+_Scores: "SOFA"_
+_SOFA score uses GCS, MAP, Creatinine/Urine, PaO2/FiO2, Bilirubin and Platelets. Upon closer inspect of SOFA score, it appears the calculations may be wildly inaccurate. Don't include._
+##Selected Variables: Nil
+Total number of variables = 13
+  
+
+
+##EDA
+```{r review of selected variables}
+
+#dataframe with selected varialbles only
+ICUMort.f <- ICUMort[,c("Glucose_diff", "WBC_min", "pH_diff", "Bilirubin_min", "BUN_min", "PaO2_max", "RespRate_min", "MAP_max", "Na_max", "GCS_max", "Age", "Gender", "ICUType", "in_hospital_death")]
+
+summary(ICUMort.f)
+str(ICUMort.f)
 
 for (i in names(ICUMort.f)){
+
   if(is.numeric(ICUMort.f[[i]])){
   
     print(ggplot(ICUMort.f, aes(ICUMort.f[[i]])) +
-          geom_histogram(aes(y = ..density.., fill = factor(in_hospital_death, labels = c("No","Yes"))), alpha = .3, bins = 30, position = "identity") +
+          geom_histogram(aes(y = ..density.., fill = factor(in_hospital_death, labels = c("No","Yes"))), alpha = .3, bins = 60, position = "identity") +
           labs(x=i, fill="Died", title = paste0("Density Plot of ", i,", ", length(na.omit(ICUMort.f[[i]]))," values available")))
 
     }else{
@@ -266,12 +301,65 @@ for (i in names(ICUMort.f)){
           labs(x = i, fill = "Died", title = paste0("Bar Plot of ", i,", ",  length(na.omit(ICUMort.f[[i]])), " values available")))
   
   }
-
 }
+
+
+
+
+for (i in names(ICUMort.f[,names(ICUMort.f)!="in_hospital_death"])){
+      
+        if(is.numeric(ICUMort.f[[i]])){
+        
+          ybl <- boxplot.stats(ICUMort.f[[i]])$stats[c(1, 5)]
+          ybl <- ybl * c(.75,1.25)
+          print(ggplot(ICUMort.f, aes(Gender,ICUMort.f[[i]], fill = factor(in_hospital_death, labels = c("No","Yes")))) +
+                geom_boxplot(outlier.colour = NA) + coord_cartesian(ylim = ybl) +
+                labs(y=i, fill="Died", title = paste0("Density Plot of ", i,", ", length(na.omit(ICUMort.f[[i]]))," values available"))) 
+      
+          }
+}
+#possible interactions: Glucose:Gender, BUN:Gender, RespRate:Gender, Age:Gender
+
+for (i in names(ICUMort.f[,names(ICUMort.f)!="in_hospital_death"])){
+      
+        if(is.numeric(ICUMort.f[[i]])){
+        
+          ybl <- boxplot.stats(ICUMort.f[[i]])$stats[c(1, 5)]
+          ybl <- ybl * c(.75,1.25)
+          print(ggplot(ICUMort.f, aes(ICUType,ICUMort.f[[i]], fill = factor(in_hospital_death, labels = c("No","Yes")))) +
+                geom_boxplot(outlier.colour = NA) + coord_cartesian(ylim = ybl) +
+                labs(y=i, fill="Died", title = paste0("Density Plot of ", i,", ", length(na.omit(ICUMort.f[[i]]))," values available"))) 
+      
+          }
+}
+#possible interactions: BUN:ICUType, PaO2:ICUType, GCS:ICUType
+
+
+#correlation plot to  explore relationships
+library(corrplot)
+ICUMort.cor <- cor(ICUMort.f[,sapply(ICUMort.f, is.numeric)])
+corrplot(ICUMort.cor,  method = "circle", type = "upper")
+
+#further explore noted correlation between GCS_max and RespRate_min
+ggplot(ICUMort.f, aes(RespRate_min, GCS_max, colour = factor(in_hospital_death, labels = c("No","Yes")))) + geom_point(position = "jitter") + geom_smooth(method="lm") + labs(colour="Died")
 
 ```
 
+
+##Cath
+##Selecting predictor variables for in hostital death
+
+SAPS1 and SOFA seem like obvious choices, as these have been developed as predictors of clinical outcomes (SOFA) and risk of death (SAPS-I).  
+
+Age should also be included, as those who are very young or very old will likely have a higher risk of death.
+
+Include variables from SAPS-I as this has already been verified to correlate with increased risk of death (BUN, GCS, HCO3, HCT, HR, K, Na, RespRate, SysABP, Urine, WBC). Similarly for SOPS (PaO2, Platelets, Bilirubin, Creatinine, GCS).
+
+
+
 ```{r, EDA}
+##JASON - I'm happy to remove this section, you've done a nice EDA above.
+
 #added require and lib statement to make sure appropriate packages loaded, I also had a conflict with the select function 
 require("dplyr","tidyr","ggplot2")
 library(dplyr)
@@ -295,10 +383,10 @@ icu_patients_df1 %>% dplyr::select(in_hospital_death, SOFA, SAPS1) %>%
 ```{r, univariate models}
 #Should start with univariate models for each of the variables we included.
 #Create vector of variables
-var_selection <- c("SOFA", "Glucose_diff", "WBC_min", "pH_diff", "Albumin_max", "BUN_min", "RespRate_min", "HR_diff", "Na_max", "Age", "Gender", "ICUType")
+var_selection <- c("Glucose_diff", "WBC_min", "pH_diff", "Bilirubin_min", "BUN_min", "PaO2_max", "RespRate_min", "MAP_max", "Na_max", "GCS_max", "Age", "Gender", "ICUType")
 #Create a list of univariate models for each of the variables selected
 formulas<- paste('in_hospital_death ~', var_selection)
-unimod_list <- lapply(formulas, glm, family = binomial(), data = t.ICUMort)
+unimod_list <- lapply(formulas, glm, family = binomial(), data = ICUMort.f)
 #Summary of all models
 unimod_summ <- lapply(unimod_list, summary)
 unimod_summ
@@ -308,36 +396,336 @@ unimod_odds <- lapply(unimod_list, function(x) {exp(coef(x))})
 unimod_odds
 #pH diff has the largest effect, others increase odds by between ~2 -15 %, most around 2.  Albumin_max decreases odds by ~ 38%.
 
+#Check interactions from EDA
+var_int_selection <- c("Glucose_diff:Gender", "BUN_min:Gender", "RespRate_min:Gender", "Bilirubin_min:Gender", "pH_diff:Gender", "BUN_min:ICUType", "PaO2_max:ICUType", "Bilirubin_min:ICUType", "GCS_max:ICUType", "Age:ICUType")
+formulas_int<- paste('in_hospital_death ~', var_int_selection)
+unimod_int_list <- lapply(formulas, glm, family = binomial(), data = ICUMort.f)
+unimod_int_summ <- lapply(unimod_int_list, summary)
+unimod_int_summ
+#all interactions statistically significant.
 ```
 
 ```{r, multivariate models}
 #Include all variables from above
-full_mod<-glm(in_hospital_death ~ SOFA + Glucose_diff + WBC_min + pH_diff +
-                Albumin_max + BUN_min + RespRate_min + HR_diff + Na_max +
-                Age + Gender + ICUType, family = binomial(), data = t.ICUMort)
+full_mod<-glm(in_hospital_death ~ Glucose_diff + WBC_min + pH_diff +
+                Albumin_max + BUN_min + RespRate_min + MAP_max + Na_max + GCS_Max +
+                Age + Gender + ICUType, family = binomial(), data = ICUMort.f)
 summary(full_mod)
+
+#Interactions model from above based on EDA
+int_mod<-glm(in_hospital_death ~ Age:Gender + Glucose_diff:Gender + BUN_min:Gender + 
+              RespRate_min:Gender + Bilirubin_min:Gender + pH_diff:Gender + BUN_min:ICUType + 
+              PaO2_max:ICUType + Bilirubin_min:ICUType + GCS_max:ICUType + Age:ICUType, 
+              family = binomial(), data = ICUMort.f)
+summary(int_mod)
+
+#Full model with interactions
+full_mod_int <-glm(in_hospital_death ~ Glucose_diff + WBC_min + pH_diff +
+                Albumin_max + BUN_min + RespRate_min + MAP_max + Na_max + GCS_Max +
+                Age + Gender + ICUType + Age:Gender + Glucose_diff:Gender + BUN_min:Gender + 
+                RespRate_min:Gender + Bilirubin_min:Gender + BUN_min:ICUType + PaO2_max:ICUType +
+                Bilirubin_min:ICUType + GCS_max:ICUType, family = binomial(), data = ICUMort.f)
+summary(full_mod_int)
+
 #Compare to a null model
-null_mod <- glm(in_hospital_death ~ 1, family = binomial, data = t.ICUMort)
+null_mod <- glm(in_hospital_death ~ 1, family = binomial, data = ICUMort.f)
 anova(full_mod, null_mod, test = "Chisq")
+anova(full_mod_int, null_mod, test = "Chisq")
 #Reject null hypothesis of no relationship between predictors and outcome
+
 #Check AIC when removing variables sequentially
-step(full_mod, trace = 1)
+red_mod <- step(full_mod, trace = 1)
+red_int_mod <- step(full_int_mod, trace = 1)
+anova(red_mod, red_int_mod, test = "Chisq")
+
+#compare reduced models
+anova(red_mod, red_int_mod, test = "Chisq")
+#statistically significant, can not reject null hypothesis
+
+#compare AIC
+red_int_mod$aic
+red_mod$aic
+#interaction model lower, better fit
+
 #AIC is lowest when WBC_min, Glucose_diff and Gender are removed.  Will fit a reduced model, but will keep Gender in the model for now - good to show whether sex has an influence on the outcome or not.
-red_mod <- glm(in_hospital_death ~ SOFA + pH_diff + Albumin_max + BUN_min + 
-                 RespRate_min + HR_diff + Na_max +Age + Gender + ICUType, 
-               family = binomial(), data = t.ICUMort)
+red_mod <- glm(in_hospital_death ~ SOFA + pH_diff + Albumin_max + BUN_min + GCS_Max +
+                 RespRate_min + MAP_max + Na_max +Age + Gender + ICUType, 
+               family = binomial(), data = ICUMort.f)
 summary(red_mod)
 #Compare full and reduced model
 anova(full_mod,red_mod, test = "Chisq")
 #No significant difference, so acceptable to use the simpler model.
+
+#models fit for task: full model, interaction model, full interaction model, reduced full model, reduced interaction model, reduced full interaction model, statistically significant full model,  null model
 ```
 _will include some commentary on these results_
 
-Next step is to examine the goodness of fit, and model assumptions.
+###Jason multivariate
+```{r, multivariate models}
+#Include all variables from above
+full_mod<-glm(in_hospital_death ~ Glucose_diff + WBC_min + pH_diff +
+                Bilirubin_min + BUN_min + RespRate_min + MAP_max + Na_max + GCS_max +
+                Age + Gender + ICUType, family = binomial(), data = ICUMort.f)
+summary(full_mod)
+#check statistically significant values
+# coef.df <- as.data.frame(summary(full_mod)$coefficients)
+# as.matrix(coef.df[coef.df$`Pr(>|z|)`<0.05,])
+#pH_diff, Bilirubin_min, BUN_min, Na_max, GCS_max, Age, ICUType
 
-```{r; Task1, goodness of fit}
+#create statistically significant model
+sig_full_mod<-glm(in_hospital_death ~ pH_diff + Bilirubin_min + BUN_min + Na_max + 
+                    GCS_max + Age + ICUType, family = binomial(), data = ICUMort.f)
+summary(sig_full_mod)
+
+#compare full with statistically significant for anova and AIC
+anova(full_mod, sig_full_mod, test = "Chisq")
+full_mod$aic
+sig_full_mod$aic
+#test not significant, AIC lower for sig model, we can accept the simpler model
+
+#Interactions model from above
+int_mod<-glm(in_hospital_death ~ Age:Gender + Glucose_diff:Gender + BUN_min:Gender + RespRate_min:Gender + Bilirubin_min:Gender + pH_diff:Gender + BUN_min:ICUType + PaO2_max:ICUType + Bilirubin_min:ICUType + GCS_max:ICUType + Age:ICUType, family = binomial(), data = ICUMort.f)
+summary(int_mod)
+#check statistically significant values
+# coef.df <- as.data.frame(summary(int_mod)$coefficients)
+# as.matrix(coef.df[coef.df$`Pr(>|z|)`<0.05,])
+#Age:Gender, BUN_min:Gender, pH_diff:Gender, BUN_min:ICUType, PaO2_max:ICUType, GCS_max:ICUType
+#create statistically significant model
+sig_int_mod<-glm(in_hospital_death ~ Age:Gender + BUN_min:Gender + pH_diff:Gender + BUN_min:ICUType + 
+                   PaO2_max:ICUType + GCS_max:ICUType, family = binomial(), data = ICUMort.f)
+summary(sig_int_mod)
+
+#compare full with statistically significant for anova and AIC
+anova(int_mod, sig_int_mod, test = "Chisq")
+int_mod$aic
+sig_int_mod$aic
+#test statistically significant, AIC lower for int model, reject null hypothesis and keep original model
+
+#Full model with interactions
+full_int_mod <-glm(in_hospital_death ~ Glucose_diff + WBC_min + pH_diff +
+                Bilirubin_min + BUN_min + RespRate_min + MAP_max + Na_max + GCS_max +
+                Age + Gender + ICUType + Glucose_diff:Gender + BUN_min:Gender + 
+                RespRate_min:Gender + Bilirubin_min:Gender + BUN_min:ICUType + PaO2_max:ICUType +
+                Bilirubin_min:ICUType + GCS_max:ICUType + Age:Gender, family = binomial(), data = ICUMort.f)
+summary(full_int_mod)
+#check statistically significant values
+# coef.df <- as.data.frame(summary(full_int_mod)$coefficients)
+# as.matrix(coef.df[coef.df$`Pr(>|z|)`<0.05,])
+#pH_diff, BUN_min, Na_max, GCS_max, Age, ICUType, Gender, Age:Gender, PaO2_max:ICUType, GCS_max:ICUType
+
+#create statistically significant model at 0.1
+sig_full_int_mod<-glm(in_hospital_death ~ pH_diff + BUN_min + Na_max + GCS_max + RespRate_min + BUN_min:ICUType +
+                Age + Gender + ICUType + PaO2_max:ICUType + GCS_max:ICUType + Age:Gender,
+                family = binomial(), data = ICUMort.f)
+summary(sig_full_int_mod)
+
+#compare full with statistically significant for anova and AIC
+anova(full_int_mod, sig_full_int_mod, test = "Chisq")
+int_mod$aic
+sig_int_mod$aic
+#test statistically significant, AIC lower for full int model, reject null hypothesis and keep original model
+
+#check full models against stepwise removal of variables
+red_full_mod <- step(full_mod, trace = 0)
+red_int_mod <- step(int_mod, trace = 0)
+red_full_int_mod <- step(full_int_mod, trace = 0)
+
+#compare stepwise reduced models chosen models
+anova(sig_full_mod, red_full_mod, test = "Chisq")
+sig_full_mod$aic
+red_full_mod$aic
+#models are exactly the same, keep sig_full_mod
+
+anova(int_mod, red_int_mod, test = "Chisq")
+int_mod$aic
+red_int_mod$aic
+summary(int_mod)
+summary(red_int_mod)
+#test not statistically significant, AIC lower for reduced model, use reduced model
+#additional note - bilirubin:gender, resprate:gender and glucose:gender removed in stepwise reduction
+
+anova(full_int_mod, red_full_int_mod, test = "Chisq")
+full_int_mod$aic
+red_full_int_mod$aic
+#test not statistically significant, AIC lower for reduced model, use reduced model
+#additional note - WBC_min, RespRate_min, MAP_max, Glucose_diff:Gender, BUN_min:Gender, RespRate_min:Gender, Bilirubin_min:Gender and Bilirubin_min:ICUType removed in stepwise reduction
+
+
+#Compare chosen models to a null model
+null_mod <- glm(in_hospital_death ~ 1, family = binomial, data = ICUMort.f)
+anova(sig_full_mod, null_mod, test = "Chisq")
+anova(red_int_mod, null_mod, test = "Chisq")
+anova(red_full_int_mod, null_mod, test = "Chisq")
+#All tests statistically significant - Reject null hypothesis of no relationship between predictors and outcome for all models
+
+#compare chosen models
+anova(sig_full_mod, red_int_mod, test = "Chisq")
+sig_full_mod$aic
+red_int_mod$aic
+anova(sig_full_mod, red_full_int_mod, test = "Chisq")
+sig_full_mod$aic
+red_full_int_mod$aic
+anova(red_int_mod, red_full_int_mod, test = "Chisq")
+an$`Pr(>Chi)`
+red_int_mod$aic
+red_full_int_mod$aic
+#all tests statistically significant, can not reject null hypothesis, AIC improved on reduced models, 
+#unable to compare interaction models due to not enough degrees of freedom, 
+#p-value more significant for reduced full interaction model and AIC lower that both other models
+#can we rationalise the variables???
+
+#models for further analysis - sig_full_mod, red_int_mod, red_full_int_mod
 
 ```
+Next step is to examine the goodness of fit, and model assumptions.
+
+```{r, Task1, goodness of fit}
+#Calculate the Hosmer-Lemeshow statistic
+#linear predictors
+require(ResourceSelection)
+library(ResourceSelection)
+#Vector of predicted probabilities
+pred <- predict(red_mod, type = "response")
+hl <- hoslem.test(red_mod$y, pred, g=80)
+hl
+#No indication of a lack of fit as p > 0.05.
+#Create Brier score
+bs <- mean((pred - ICUMort.f$in_hospital_death)^2)
+bs
+#Compare to full model
+bs_full <- mean((predict(full_mod, type = "response") - ICUMort.f$in_hospital_death)^2)
+bs_full
+#Almost the same, more parsimonious model acceptible
+#Compare to null model
+bc_null <- mean((predict(null_mod, type = "response") - ICUMort.f$in_hospital_death)^2)
+bc_null
+#Brier score indicates that the reduced and full models are better than the null, but nor by a huge degree.
+#PseudoR2
+library(DescTools)
+#PsuedoR2 for reduced
+PseudoR2(red_mod, which = "all")
+#PsuedoR2 for full
+PseudoR2(full_mod, which = "all")
+#PsuedoR2 for null
+PseudoR2(null_mod, which = "all")
+#Relatively small proportion of variance explained, but a lot more than the null model.
+```
+```{r, Task1, goodness of fit - JASON}
+
+#possible models - sig_full_mod, red_int_mod, red_full_int_mod
+
+#Calculate the Hosmer-Lemeshow statistic
+#linear predictors
+library(ResourceSelection)
+#Vector of predicted probabilities
+pred_mod1 <- predict(sig_full_mod, type = "response")
+hl_mod1 <- hoslem.test(sig_full_mod$y, pred_mod1, g=80)
+hl_mod1
+#No indication of a lack of fit as p > 0.05.
+
+pred_mod2 <- predict(red_int_mod, type = "response")
+hl_mod2 <- hoslem.test(red_int_mod$y, pred_mod2, g=80)
+hl_mod2
+#No indication of a lack of fit as p > 0.05.
+
+pred_mod3 <- predict(red_full_int_mod, type = "response")
+hl_mod3 <- hoslem.test(red_full_int_mod$y, pred_mod3, g=80)
+hl_mod3
+#No indication of a lack of fit as p > 0.05.
+
+pred_null <- predict(null_mod, type = "response")
+hl_null <- hoslem.test(null_mod$y, pred_mod3, g=80)
+hl_null
+
+#Compare brier scores
+bs_mod1 <- mean((pred_mod1 - ICUMort.f$in_hospital_death)^2)
+bs_mod1
+bs_mod2 <- mean((pred_mod2 - ICUMort.f$in_hospital_death)^2)
+bs_mod2
+bs_mod3 <- mean((pred_mod3 - ICUMort.f$in_hospital_death)^2)
+bs_mod3
+bc_null <- mean((pred_null - ICUMort.f$in_hospital_death)^2)
+bc_null
+#Almost the same, more parsimonious model acceptible - red_int_mod??
+
+#Brier score indicates that the reduced and full models are better than the null, but nor by a huge degree.
+#PseudoR2
+library(DescTools)
+#PsuedoR2 models under question
+a <- t(PseudoR2(sig_full_mod, which = "all"))
+b <- t(PseudoR2(red_int_mod, which = "all"))
+c <- t(PseudoR2(red_full_int_mod, which = "all"))
+d <- t(PseudoR2(null_mod, which = "all"))
+
+#turn into table for easier interpretation
+psudortbl <- rbind(a,b,c,d)
+rownames(psudortbl) <- c("sig_full_mod", "red_int_mod", "red_full_int_mod", "null_mod")
+#round values for output
+round(psudortbl,4)
+
+#just for fun...
+ICUMort.f %>% mutate(predprob=predict(red_full_int_mod, type="response")) -> ICUMort.f
+par(pty="s")
+plot.roc(ICUMort.f$in_hospital_death, ICUMort.f$predprob, identity.col="black", legacy.axes=TRUE,
+    auc.polygon = TRUE, auc.polygon.col=rgb(.9,0.1,0.1, alpha = 0.3), col="red")
+
+ICUMort.f %>% mutate(predprob=predict(red_int_mod, type="response")) -> ICUMort.f
+plot.roc(ICUMort.f$in_hospital_death, ICUMort.f$predprob, identity.col="black", legacy.axes=TRUE,
+    auc.polygon = TRUE, auc.polygon.col=rgb(.1,0.1,0.9, alpha = 0.3),add=TRUE, col="blue")
+
+ICUMort.f %>% mutate(predprob=predict(sig_full_mod, type="response")) -> ICUMort.f
+plot.roc(ICUMort.f$in_hospital_death, ICUMort.f$predprob, identity.col="black", legacy.axes=TRUE,
+    auc.polygon = TRUE, auc.polygon.col=rgb(.1,0.9,0.1, alpha = 0.3),add=TRUE, col="green")
+```
+
+##Goodness of fit
+Both the full and reduced model explain more variation than the null model, but it is a relatively small amount of the variance (McFadden ~0.17).  No evidence of a lack of fit from the Hosmer-Lemeshow statistic, and Brier scores are lower (i.e. better) for both full ad reduced model compared to the null.  Not a huge difference between the full and reduced models.
+
+```{r}
+#Calculate confusion matrix
+library(caret)
+#Create vector of predicted outcomes, set 0.5 as threshold
+pred_oc <- as.factor(ifelse(pred < 0.5, "no", "yes"))
+#Convert outcome to no yes factor
+oc <- as.factor(ifelse(ICUMort$in_hospital_death == 0, "no", "yes"))
+confusionMatrix(pred_oc, oc, positive = "yes")
+#Not a great at predicting death, only ~16% sensitivity.  Look at distribution of predicted probs for each case.
+mod_pred <- data.frame(pred,oc)
+ggplot(mod_pred, aes(x = oc, y = pred)) + geom_boxplot() +
+  labs(title = "Predicted probabilities from reduced model by outcome", 
+       x = "Death", y = "Probability")
+#Based on the graphs, change the threshold for considering the outcome to occur to 0.2
+#Create vector of predicted outcomes, set 0.5 as threshold
+pred_oc2 <- as.factor(ifelse(pred < 0.2, "no", "yes"))
+#Convert outcome to no yes factor
+confusionMatrix(pred_oc2, oc, positive = "yes")
+#Still not great at predicting the outcome, sensitivity improved, but specificity is reduced - pos predictive value only 35%. Should look to see how this compares to 
+#First try ROC
+library(Epi)
+#Plot reduced model ROC
+ROC(pred, oc, plot = "ROC", main = "Reduced model ROC")
+#Plot full model ROC
+pred_full <- predict(full_mod, type = "response")
+ROC(pred_full, oc, plot = "ROC", main = "Full model ROC")
+
+```
+
+##Predictive value
+Moderate performance of the model, with ROC AUC of 0.786.  By comparison, the mean SOFA score showed AUC of ~0.88 in the publication linked above.  
+
+Maybe if more variables are included from the initial set, a better prediction could be achieved?
+
+What about SOFA alone?
+```{r - check AUC of univariate SOFA model}
+ROC(predict(unimod_list[[1]], type = "response"), oc, plot = "ROC")
+#AUC only 0.651 in this dataset for a univariate SOFA model.
+```
+
+I wonder if we should try to include SAPS1 with missing rows removed from the entire dataset - would mean loosing 96 of 2061.  Could also try adding other variables ruled out above to the model to see if we get a better fit.
+
+
+
+
 
 
 # Task 2 (15 marks)
@@ -376,7 +764,163 @@ icu_patients_df1 <- readRDS("icu_patients_df1.rds")
 #View(icu_patients_df1)
 head(icu_patients_df1)
 str(icu_patients_df1)
+
 ```
+
+
+
+
+# KD code
+
+##Consideration for variables
+We only need to include 5-10ish variables. This is requires a logical approach to culling. Propose first step is to remove any variables that do not have a full set of data (eg 2061 records). The rationale for this is that if you include variables incomplete variables then if you drop an incomplete variable you may not be able to adequately compare the models. Suggest 1 variable per body system not covered in SOFA score (GCS, MAP, Creatinine/Urine, PaO2/FiO2, Bilirubin, Platelets) as SOFA covers those variables.  
+  
+# Consider using variables used in already validated scores such as SAPSII, APACHE etc. https://www.mdcalc.com/simplified-acute-physiology-score-saps-ii
+# Also we want to use markers which will predict the length of survival. Often a change in these markers is a bad sign - so consider using diff variables more. 
+
+#Variables left after incomplete variables removed and variables in SOFA score.
+
+##Assessable outcome: "in_hospital_death"  
+_Demographics: "Age", "Gender", "ICUType"_
+_Age and sex are demographics important for identifying confounders. Height is missing a lot of values. Is length of stay a predictor or an outcome? Suggest outcome, remove.  Weight can be bad for overweight and underweight._
+##Selected Variables: "Age", "Gender", "ICUType" 
+Total number of variables = 3
+
+_CNS: "Na_diff", "Na_max", "Na_min"_
+_Low sodium worse than high sodium but both bad.   _
+##Selected Variables: "Na_diff"
+Total number of variables = 4
+
+_Cardiovascular: "HR_diff", "HR_max", "HR_min", "K_diff", "K_max", "K_min", "Mg_diff", "Mg_max", "Mg_min", "Temp_diff", "Temp_max", "Temp_min", "TroponinI_diff", "TroponinI_max", "TroponinI_min", "TroponinT_diff", "TroponinT_max", "TroponinT_min"_
+_Troponins are a sign of cardiac ischaemia, which can occur for multiple reasons and would be a poor prognostic indicator. Trop I and T are similar, use Trop I. High temp is a sign of sepsis/infection. K is an electrolyte that often becomes deranged, both high and low are equally bad - use K_diff. HR is bad at both extremes - use HR_diff._
+##Selected Variables: "HR_diff", "K_diff", "Temp_max", "TroponinI_max"
+Total number of variables = 8
+
+_PULMONARY: "PaCO2_diff", "PaCO2_max", "PaCO2_min", "RespRate_diff", "RespRate_max", "RespRate_min", "SaO2_diff", "SaO2_max", "SaO2_min"_
+_These are covered by the SOFA score, which takes into account the PaO2 and whether they are being mechanically ventilated. Leave all of them out.._
+##Selected Variables: none
+Total number of variables = 8
+
+_Renal: "BUN_diff", "BUN_max", "BUN_min"_
+_Good marker of renal impairment, higher is worse._
+##Selected Variables: "BUN_max"
+Total number of variables = 9
+
+_Liver: "Albumin_diff", "Albumin_max", "Albumin_min", "ALP_diff", "ALP_max", "ALP_min", "ALT_diff", "ALT_max", "ALT_min", "AST_diff", "AST_max", "AST_min", "Cholesterol_diff", "Cholesterol_max", "Cholesterol_min"_
+_Low albumin is bad and is a marker of the liver's synthetic ability, however it is covered by the bilirubin measurement. High bilirubin is bad - used in the SOFA score. ALT and ALT are early markers for liver failure and may be an early predictor for mortality - try use ALT_max, (ALT better than AST for most liver issues). Unclear about the role of Cholesterol in critical illness, leave out._
+##Selected Variables: "ALT_max"
+Total number of variables = 10
+
+_METABOLIC/OTHER: "Glucose_diff", "Glucose_max", "Glucose_min", "HCO3_diff", "HCO3_max", "HCO3_min", "Lactate_diff", "Lactate_max", "Lactate_min", "WBC_diff", "WBC_max", "WBC_min", "pH_diff", "pH_max", "pH_min", "HCT_diff", "HCT_max", "HCT_min"  _
+_Glucose is often high at times of acute illness and can be controlled with insulin. Glucose in this setting is probably a poor indicator of comorbid diabetes, leave these out. HCO3 bad if it’s low - use this. High lactate is bad, try use this. WBC marker for infection in both directions, but low <1 is really bad - use this. Low platelets are bad. pH is a good marker of severity of illness, bad in both directions, also related to HCO3 and PaCO2. HCT used in APACHE scoring, low is bad, add this in as well._
+##Selected Variables: "HCO3_min", "Lactate_max", "WBC_min", "pH_diff", "HCT_min"
+Total number of variables = 15
+
+_SCORES: "SOFA"_
+_SOFA score uses GCS, MAP, Creatinine/Urine, PaO2/FiO2, Bilirubin and Platelets._
+##Selected Variables: "SOFA" 
+Total number of variables = 16
+
+Final list of variables:
+"SOFA", "Age", "Gender", "ICUType", "Na_diff", "HR_diff", "K_diff", "Temp_max", "TroponinI_max", "BUN_max", "ALT_max", "HCO3_min", "Lactate_max", "WBC_min", "pH_diff", "HCT_min"
+
+```{r}
+#remove incomplete variables to maintain data integrity
+ICUsurv <- icu_patients_df1[,complete.cases(t(icu_patients_df1))]
+
+#ensure all max and min values are in the right columns
+
+#function to swap values that are inconsistent with allocation
+maxval <- function(df, Max, Min){
+  df[na.omit(df[,Max])<na.omit(df[,Min]),c(Min,Max)] <- unname(df[na.omit(df[,Max])<na.omit(df[,Min]),c(Max,Min)])
+  df
+}
+
+#loop checks for "max" variables then compares to the corresponding "min" value and swaps values where necessary
+for (i in names(ICUsurv)){
+  if (substr(i, nchar(i)-2, nchar(i)) == "max"){
+  j <- paste0(substr(i, 1, nchar(i)-4 ),"_min")
+  t.ICUsurv <- maxval(ICUsurv, i, j)
+  }
+}
+
+#dataframe with selected varialbles only
+ICUsurv.f <- ICUsurv[,c("SOFA", "Age", "Gender", "ICUType", "Na_diff", "HR_diff", "K_diff", "Temp_max", "TroponinI_max", "BUN_max", "ALT_max", "HCO3_min", "Lactate_max", "WBC_min", "pH_diff", "HCT_min", "in_hospital_death", "Status", "Days")]
+
+require("ggplot2")
+library(ggplot2)
+
+for (i in names(ICUsurv.f)){
+  if(is.numeric(ICUsurv.f[[i]])){
+  
+    print(ggplot(ICUsurv.f, aes(ICUsurv.f[[i]])) +
+          geom_histogram(aes(y = ..density.., fill = factor(in_hospital_death, labels = c("No","Yes"))), alpha = .3, bins = 30, position = "identity") +
+          labs(x=i, fill="Died", title = paste0("Density Plot of ", i,", ", length(na.omit(ICUsurv.f[[i]]))," values available")))
+
+    }else{
+
+    print(ggplot(ICUsurv.f, aes(ICUsurv.f[[i]], fill=factor(in_hospital_death, labels = c("No", "Yes")))) +
+          geom_bar(position = "fill") +
+          labs(x = i, fill = "Died", title = paste0("Bar Plot of ", i,", ",  length(na.omit(ICUsurv.f[[i]])), " values available")))
+  
+  }
+
+}
+
+
+```
+
+```{r 2c}
+
+
+
+
+vars_2 <- c("SOFA", "Age", "Gender", "ICUType", "Na_diff", "HR_diff", "K_diff", "Temp_max", "TroponinI_max", "BUN_max", "ALT_max", "HCO3_min", "Lactate_max", "WBC_min", "pH_diff", "HCT_min")
+
+#making formulas
+univ_formulas <- sapply(vars_2, function(x)as.formula(paste('Surv(Days,Status)~',x))
+)
+#making a list of models
+univ_models <- lapply(univ_formulas, function(x){coxph(x,data=ICUsurv.f)})
+
+#Create a list of univariate Cox PH models for each of the variables selected
+#formulas2<- paste0("Surv(Days, Status) ~ ", vars_2)
+#unicox_list <- lapply(formulas2, coxph, data = t.ICUsurv)
+#summary(unicox_list)
+
+
+univ_results <- lapply(univ_models, function(x){summary(x)})
+univ_results
+```
+TroponinI_max is clearly not significant - remove.
+HCT_min also not significant. Also this is related to pH - remove.
+Leave others in for now. 
+
+```{r}
+
+cox.multi <- coxph(Surv(Days,Status) ~ SOFA + Age + Gender + ICUType + Na_diff + HR_diff + K_diff + Temp_max + BUN_max + ALT_max + Lactate_max + WBC_min + pH_diff + HCT_min, data=ICUsurv.f)
+
+summary(cox.multi)
+
+
+
+```
+
+```{r}
+
+cox.s1 <- step(cox.multi)
+summary(cox.s1)
+
+
+
+```
+
+
+
+
+
+
+# Yalin's code #
 
 ### Task 2 Part1.b
 The categorical variables in the dataset that may be associated with a person’s survival are:
@@ -561,6 +1105,7 @@ print(anova(cox.mv2, cox.mv3))
 extractAIC(cox.mv1)
 extractAIC(cox.mv2)
 extractAIC(cox.mv3)
+extractAIC(cox.multi)
 
 # Higher (worse) AIC for the cox.mv3 model
 
