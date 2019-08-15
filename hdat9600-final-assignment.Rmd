@@ -1121,8 +1121,6 @@ summary(cox.mv2)
 
 ```
 
-
-
 ### Task 2 Part6
 ```{r Taks2_Part6.a}
 # diagnostic statistics
@@ -1140,8 +1138,28 @@ ggcoxzph(prop.mv1)
 
 The output from the proportional hazards test shows that the test is statistically significant (p-value < 0.05) for ALP_max, ALP_min, Urine_diff, and Urine_max variable. The global test is also statistically significant (p-value = 1.52e-04). 
 
-As shown in the plot of the Schoefeld residuals, the time-varying coefficient for significant variables seems to change at 120. 
-Thus, I will choose a follow-up time point around 120 to split the follow-up time to fit two Cox models to attempt to resolve the violation.
+
+ALP_max, ALP_min, Urine_diff, and Urine_max variable:
+violates the PH assumption, resulting in strong evidence of non-proportional hazards for the global model
+
+
+
+
+```{r Taks2_Part6.b}
+# assume that continuous covariates have a linear form
+
+# plot the Martingale residuals against continuous covariates can be used to detect nonlinearity 
+# graphs of continuous covariates against martingale residuals of null cox proportional hazards model
+ggcoxfunctional(Surv(Days, Status) ~ ALP_max + log(ALP_max) + sqrt(ALP_max), data = icu_patients_df1)
+ggcoxfunctional(Surv(Days, Status) ~ ALP_max + log(ALP_min) + sqrt(ALP_min), data = icu_patients_df1)
+ggcoxfunctional(Surv(Days, Status) ~ Urine_diff + log(Urine_diff) + sqrt(Urine_diff), data = icu_patients_df1)
+
+
+# Patterns of Urine_diff in the plot may suggest that the variable is not properly fit.
+
+```
+
+
 
 
 ```{r Taks2_Part6.b}
