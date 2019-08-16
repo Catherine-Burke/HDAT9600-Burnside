@@ -1,9 +1,11 @@
 ---
 title: "HDAT9600 Final Assignment"
-subtitle: "Submission deadline is 5pm Friday 23 2019 "
 author: "insert your team name here"
 date: "insert date of completion here"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
+subtitle: 'Submission deadline is 5pm Friday 23 2019 '
 ---
 
 ```{r setup, include=FALSE}
@@ -174,7 +176,7 @@ In this task, you are required to develop a logistic regression model using the 
 
 #####
 **Create your response to this task here, as a mixture of embedded (`knitr`) R code and any resulting outputs, and explanatory or commentary text.** 
-```{r - setup for task1}
+```{r, setup for task1}
 library(tidyverse)
 ```
 ##Jason
@@ -182,15 +184,21 @@ library(tidyverse)
 We only need to include 5-10ish variables. This is requires a logical approach to culling. Propose first step is to remove any variables that do not have a full set of data (eg 2061 records). The rationale for this is that if you include variables incomplete variables then if you drop an incomplete variable you may not be able to adequately compare the models. Suggest 1 variable per body system not covered in SOFA score (GCS, MAP, Creatinine/Urine, PaO2/FiO2, Bilirubin, Platelets) as SOFA covers those variables.  
   
 #I would be interested to hear people's thoughts on whether we should use the "diff" variables vs running the values as quadratic term "I(x^2)" instead. I suppose the advantage of "diff" is it is supposed to be the most deranged from the mean in either direction whereas the quadratic term would give us a "U" shaped relationship as opposed to a linear one.  
-
- ```{r variable to be assessed}
+```{r variable to be assessed}
 
 #check which variables have a complete set of data
 ls(icu_patients_df1[,complete.cases(t(icu_patients_df1))])
-
+#check which variables do not have a complete set of data
+missing_cases <- ls(icu_patients_df1[,!complete.cases(t(icu_patients_df1))])
+missing_cases
+#check how many records are missing from each
+colSums(is.na(icu_patients_df1[,missing_cases]))
 #remove incomplete variables to maintain data integrity
 ICUMort <- icu_patients_df1[,complete.cases(t(icu_patients_df1))]
-
+#Add back SAPS1
+ICUMort$SAPS1 <- icu_patients_df1$SAPS1
+#Remove rows with missing values
+ICUMort <- ICUMort[rowSums(is.na(ICUMort))<1,]
 #check data for internal consistency (max vs min values)
 for (i in names(ICUMort)){
   if (substr(i, nchar(i)-2, nchar(i)) == "max"){
@@ -225,9 +233,8 @@ for (i in names(ICUMort)){
 #SOFA has a negative value - investigate (check for consistency with scoring against GCS, MAP, Creatinine/Urine, PaO2/FiO2, Bilirubin and Platelets)
 icu_patients_df1[icu_patients_df1$SOFA<1,c("SOFA", "PaO2_min", "FiO2_max", "Bilirubin_max", "GCS_min", "Creatinine_max", "Urine_max", "Platelets_min", "MAP_min")]
 #wild variation in score relative to variables in -1 and 0, leave out
-
-
 ```
+
   
 #I would be interested to hear people's thoughts on whether we should use the "diff" variables vs running the values as quadratic term "I(x^2)" instead. I suppose the advantage of "diff" is it is supposed to be the most deranged from the mean in either direction whereas the quadratic term would give us a "U" shaped relationship as opposed to a linear one.
   
@@ -270,24 +277,25 @@ _Glucose bad if low or high, diabetes also a high mortaility comorbidity in ICU.
 ##Selected Variables: "Glucose_diff", "WBC_min", "pH_diff"
 Total number of variables = 13
 
-_Scores: "SOFA"_
+_Scores: "SOFA", "SAPS1"_
 _SOFA score uses GCS, MAP, Creatinine/Urine, PaO2/FiO2, Bilirubin and Platelets. Upon closer inspect of SOFA score, it appears the calculations may be wildly inaccurate. Don't include._
+_SAPS1 score includes BUN, GCS, HCO3, HCT, HR, K, Na, RespRate, SysABP, Urine & WBC. Thee are 96 missing entries for SAPS1.  Could include this score_
 ##Selected Variables: Nil
 Total number of variables = 13
-  
+
 
 
 ##EDA
 ```{r review of selected variables}
 
 #dataframe with selected varialbles only
-ICUMort.f <- ICUMort[,c("Glucose_diff", "WBC_min", "pH_diff", "Bilirubin_min", "BUN_min", "PaO2_max", "RespRate_min", "MAP_max", "Na_max", "GCS_max", "Age", "Gender", "ICUType", "in_hospital_death")]
+ICUMort.f <- ICUMort[,c("Glucose_diff", "WBC_min", "pH_diff", "Bilirubin_min", "BUN_min", "PaO2_max", "RespRate_min", "MAP_max", "Na_max", "GCS_max", "Age", "Gender", "ICUType", "in_hospital_death", "SAPS1")]
 
 summary(ICUMort.f)
 str(ICUMort.f)
 
 for (i in names(ICUMort.f)){
-
+  
   if(is.numeric(ICUMort.f[[i]])){
   
     print(ggplot(ICUMort.f, aes(ICUMort.f[[i]])) +
@@ -299,7 +307,7 @@ for (i in names(ICUMort.f)){
     print(ggplot(ICUMort.f, aes(ICUMort.f[[i]], fill=factor(in_hospital_death, labels = c("No", "Yes")))) +
           geom_bar(position = "fill") +
           labs(x = i, fill = "Died", title = paste0("Bar Plot of ", i,", ",  length(na.omit(ICUMort.f[[i]])), " values available")))
-  
+ 
   }
 }
 
@@ -380,13 +388,13 @@ icu_patients_df1 %>% dplyr::select(in_hospital_death, SOFA, SAPS1) %>%
 
 ```
 
-```{r, univariate models}
+```{r, Task 1 univariate models}
 #Should start with univariate models for each of the variables we included.
 #Create vector of variables
-var_selection <- c("Glucose_diff", "WBC_min", "pH_diff", "Bilirubin_min", "BUN_min", "PaO2_max", "RespRate_min", "MAP_max", "Na_max", "GCS_max", "Age", "Gender", "ICUType")
+var_selection <- c("Glucose_diff", "WBC_min", "pH_diff", "Bilirubin_min", "BUN_min", "PaO2_max", "RespRate_min", "MAP_max", "Na_max", "GCS_max", "Age", "Gender", "ICUType","SAPS1")
 #Create a list of univariate models for each of the variables selected
 formulas<- paste('in_hospital_death ~', var_selection)
-unimod_list <- lapply(formulas, glm, family = binomial(), data = ICUMort.f)
+unimod_list <- lapply(formulas, glm, family = binomial(), data = ICUMort)
 #Summary of all models
 unimod_summ <- lapply(unimod_list, summary)
 unimod_summ
@@ -399,7 +407,7 @@ unimod_odds
 #Check interactions from EDA
 var_int_selection <- c("Glucose_diff:Gender", "BUN_min:Gender", "RespRate_min:Gender", "Bilirubin_min:Gender", "pH_diff:Gender", "BUN_min:ICUType", "PaO2_max:ICUType", "Bilirubin_min:ICUType", "GCS_max:ICUType", "Age:ICUType")
 formulas_int<- paste('in_hospital_death ~', var_int_selection)
-unimod_int_list <- lapply(formulas, glm, family = binomial(), data = ICUMort.f)
+unimod_int_list <- lapply(formulas_int, glm, family = binomial(), data = ICUMort)
 unimod_int_summ <- lapply(unimod_int_list, summary)
 unimod_int_summ
 #all interactions statistically significant.
@@ -408,8 +416,8 @@ unimod_int_summ
 ```{r, multivariate models}
 #Include all variables from above
 full_mod<-glm(in_hospital_death ~ Glucose_diff + WBC_min + pH_diff +
-                Albumin_max + BUN_min + RespRate_min + MAP_max + Na_max + GCS_Max +
-                Age + Gender + ICUType, family = binomial(), data = ICUMort.f)
+                Albumin_max + BUN_min + RespRate_min + MAP_max + Na_max + GCS_max +
+                Age + Gender + ICUType + SAPS1, family = binomial(), data = ICUMort)
 summary(full_mod)
 
 #Interactions model from above based on EDA
@@ -421,21 +429,21 @@ summary(int_mod)
 
 #Full model with interactions
 full_mod_int <-glm(in_hospital_death ~ Glucose_diff + WBC_min + pH_diff +
-                Albumin_max + BUN_min + RespRate_min + MAP_max + Na_max + GCS_Max +
-                Age + Gender + ICUType + Age:Gender + Glucose_diff:Gender + BUN_min:Gender + 
+                Albumin_max + BUN_min + RespRate_min + MAP_max + Na_max + GCS_max +
+                Age + Gender + ICUType + SAPS1 + Age:Gender + Glucose_diff:Gender + BUN_min:Gender + 
                 RespRate_min:Gender + Bilirubin_min:Gender + BUN_min:ICUType + PaO2_max:ICUType +
-                Bilirubin_min:ICUType + GCS_max:ICUType, family = binomial(), data = ICUMort.f)
+                Bilirubin_min:ICUType + GCS_max:ICUType, family = binomial(), data = ICUMort)
 summary(full_mod_int)
 
 #Compare to a null model
-null_mod <- glm(in_hospital_death ~ 1, family = binomial, data = ICUMort.f)
+null_mod <- glm(in_hospital_death ~ 1, family = binomial, data = ICUMort)
 anova(full_mod, null_mod, test = "Chisq")
 anova(full_mod_int, null_mod, test = "Chisq")
 #Reject null hypothesis of no relationship between predictors and outcome
 
 #Check AIC when removing variables sequentially
 red_mod <- step(full_mod, trace = 1)
-red_int_mod <- step(full_int_mod, trace = 1)
+red_int_mod <- step(full_mod_int, trace = 1)
 anova(red_mod, red_int_mod, test = "Chisq")
 
 #compare reduced models
@@ -443,25 +451,18 @@ anova(red_mod, red_int_mod, test = "Chisq")
 #statistically significant, can not reject null hypothesis
 
 #compare AIC
+null_mod$aic
 red_int_mod$aic
 red_mod$aic
 #interaction model lower, better fit
 
-#AIC is lowest when WBC_min, Glucose_diff and Gender are removed.  Will fit a reduced model, but will keep Gender in the model for now - good to show whether sex has an influence on the outcome or not.
-red_mod <- glm(in_hospital_death ~ SOFA + pH_diff + Albumin_max + BUN_min + GCS_Max +
-                 RespRate_min + MAP_max + Na_max +Age + Gender + ICUType, 
-               family = binomial(), data = ICUMort.f)
-summary(red_mod)
-#Compare full and reduced model
-anova(full_mod,red_mod, test = "Chisq")
-#No significant difference, so acceptable to use the simpler model.
 
 #models fit for task: full model, interaction model, full interaction model, reduced full model, reduced interaction model, reduced full interaction model, statistically significant full model,  null model
 ```
 _will include some commentary on these results_
 
 ###Jason multivariate
-```{r, multivariate models}
+```{r, Task 1 multivariate models Jason}
 #Include all variables from above
 full_mod<-glm(in_hospital_death ~ Glucose_diff + WBC_min + pH_diff +
                 Bilirubin_min + BUN_min + RespRate_min + MAP_max + Na_max + GCS_max +
@@ -585,31 +586,32 @@ Next step is to examine the goodness of fit, and model assumptions.
 require(ResourceSelection)
 library(ResourceSelection)
 #Vector of predicted probabilities
-pred <- predict(red_mod, type = "response")
-hl <- hoslem.test(red_mod$y, pred, g=80)
+pred <- predict(red_int_mod , type = "response")
+hl <- hoslem.test(red_int_mod$y, pred, g=80)
 hl
 #No indication of a lack of fit as p > 0.05.
 #Create Brier score
-bs <- mean((pred - ICUMort.f$in_hospital_death)^2)
+bs <- mean((pred - ICUMort$in_hospital_death)^2)
 bs
 #Compare to full model
-bs_full <- mean((predict(full_mod, type = "response") - ICUMort.f$in_hospital_death)^2)
+bs_full <- mean((predict(full_mod, type = "response") - ICUMort$in_hospital_death)^2)
 bs_full
 #Almost the same, more parsimonious model acceptible
 #Compare to null model
-bc_null <- mean((predict(null_mod, type = "response") - ICUMort.f$in_hospital_death)^2)
+bc_null <- mean((predict(null_mod, type = "response") - ICUMort$in_hospital_death)^2)
 bc_null
 #Brier score indicates that the reduced and full models are better than the null, but nor by a huge degree.
 #PseudoR2
 library(DescTools)
 #PsuedoR2 for reduced
-PseudoR2(red_mod, which = "all")
+PseudoR2(red_int_mod, which = "all")
 #PsuedoR2 for full
 PseudoR2(full_mod, which = "all")
 #PsuedoR2 for null
 PseudoR2(null_mod, which = "all")
 #Relatively small proportion of variance explained, but a lot more than the null model.
 ```
+
 ```{r, Task1, goodness of fit - JASON}
 
 #possible models - sig_full_mod, red_int_mod, red_full_int_mod
@@ -703,7 +705,7 @@ confusionMatrix(pred_oc2, oc, positive = "yes")
 #First try ROC
 library(Epi)
 #Plot reduced model ROC
-ROC(pred, oc, plot = "ROC", main = "Reduced model ROC")
+ROC(pred, oc, plot = "ROC", main = "Reduced interaction model ROC")
 #Plot full model ROC
 pred_full <- predict(full_mod, type = "response")
 ROC(pred_full, oc, plot = "ROC", main = "Full model ROC")
