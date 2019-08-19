@@ -854,41 +854,59 @@ ICUMort.SICU <- within(ICUMort.SICU, rm(ICUType))
 ICUMort.CSRU <- ICUMort.t[ICUMort.t$ICUType=="Cardiac Surgery Recovery Unit",]
 ICUMort.CSRU <- within(ICUMort.CSRU, rm(ICUType))
 
-#full models using most statistically significant output from each variable group with interaction between age and gender
-CCU.full.mod <- glm(in_hospital_death ~ Age + Bilirubin_max + BUN_max + GCS_max +
-                      Gender + Glucose_min + MAP_max + Na_diff + PaO2_max + pH_diff +
-                      Platelets_diff + RespRate_min + TroponinI_min + WBC_max + SAPS1 +
+
+#Should start with univariate models for each of the variables we included.
+#Create vector of variables
+test.list.ICUtype <- test.list[test.list!="ICUType" & test.list!="in_hospital_death"]
+
+#Create a list of univariate models for each of the variables selected
+formulas<- paste('in_hospital_death ~', test.list.ICUtype)
+unimod.list.CCU <- lapply(formulas, glm, family = binomial(), data = ICUMort.CCU)
+unimod.list.MICU <- lapply(formulas, glm, family = binomial(), data = ICUMort.MICU)
+unimod.list.SICU <- lapply(formulas, glm, family = binomial(), data = ICUMort.SICU)
+unimod.list.CRSU <- lapply(formulas, glm, family = binomial(), data = ICUMort.CSRU)
+
+#Summary of all models
+(unimod_summ.CCU <- lapply(unimod.list.CCU, summary))
+(unimod_summ.MICU <- lapply(unimod.list.MICU, summary))
+(unimod_summ.SICU <- lapply(unimod.list.SICU, summary))
+(unimod_summ.CRSU <- lapply(unimod.list.CRSU, summary))
+
+
+#full models using most statistically significant output from each univariable group with added interaction between age and gender
+CCU.full.mod <- glm(in_hospital_death ~ Age + Bilirubin_diff + BUN_max + GCS_max +
+                      Gender + Glucose_max + MAP_min + Na_diff + PaO2_diff + pH_diff +
+                      Platelets_min + RespRate_max + TroponinI_max + WBC_max + SAPS1 +
                       Age:Gender
                       , data=ICUMort.CCU, family="binomial")
 (sum.full.CCU <- summary(CCU.full.mod))
 #significant predictors at 0.1 - BUN_max, GCS_max, SAPS1
 
-MICU.full.mod <- glm(in_hospital_death ~ Age + Bilirubin_min + BUN_min + GCS_max +
-                       Gender + Glucose_min + MAP_max + Na_max + PaO2_max + pH_min +
-                       Platelets_min + RespRate_max + TroponinI_max + WBC_max + SAPS1 +
+MICU.full.mod <- glm(in_hospital_death ~ Age + Bilirubin_min + BUN_min + GCS_min +
+                       Gender + Glucose_min + MAP_min + Na_max + PaO2_min + pH_min +
+                       Platelets_min + RespRate_max + TroponinI_max + WBC_diff + SAPS1 +
                        Age:Gender
                        , data=ICUMort.MICU, family="binomial")
 (sum.full.MICU <- summary(MICU.full.mod))
 #significant predictors at 0.1 - Age, BUN_min, Na_max, Platelets_dif, WBC_max, SAPS1
 
-
-SICU.full.mod <- glm(in_hospital_death ~ Age + Bilirubin_diff + BUN_min + GCS_max + Gender +
-                       Glucose_diff + MAP_diff + Na_min + PaO2_diff + pH_diff + Platelets_max +
-                       RespRate_min + TroponinI_diff + WBC_min + SAPS1 + Age:Gender
+SICU.full.mod <- glm(in_hospital_death ~ Age + Bilirubin_min + BUN_min + GCS_max + Gender +
+                       Glucose_max + MAP_diff + Na_diff + PaO2_min + pH_diff + Platelets_max +
+                       RespRate_min + TroponinI_max + WBC_diff + SAPS1 + Age:Gender
                      , data=ICUMort.SICU, family="binomial")
 (sum.full.SICU <- summary(SICU.full.mod))
 #significant predictors at 0.05 - Age, BUN_min,GCS_max, Gender, pH_diff, RespRate_min, TroponinI_diff, WBC_min, SAPS1
 
 CSRU.full.mod <- glm(in_hospital_death ~ Age + Bilirubin_max + BUN_max + GCS_max + Gender + 
-                       Glucose_min + MAP_min + Na_diff + PaO2_min + pH_max + Platelets_max +
-                       RespRate_max + TroponinI_diff + WBC_min + SAPS1 + Age:Gender
+                       Glucose_min + MAP_min + Na_diff + PaO2_max + pH_max + Platelets_max +
+                       RespRate_max + TroponinI_max + WBC_min + SAPS1 + Age:Gender
                      , data=ICUMort.CSRU, family="binomial")
 (sum.full.CSRU <- summary(CSRU.full.mod))
 #significant predictors at 0.05 - BUN_min, GCS_max, Na_diff, PaO2_max, pH_max, Platelets_max, WBC_min
 
 #significan models - keeping Age:Gender as a predictor
 #CCU
-CCU.sig.mod <- glm(in_hospital_death ~ BUN_max + GCS_max + 
+CCU.sig.mod <- glm(in_hospital_death ~ BUN_max + GCS_max + PaO2_diff +
                       SAPS1 + Age:Gender, data=ICUMort.CCU, family="binomial")
 (sum.sig.CCU <- summary(CCU.sig.mod))
 anova(CCU.full.mod, CCU.sig.mod, test="Chisq")
@@ -901,13 +919,17 @@ CCU.red.mod <- step(CCU.full.mod, trace=0)
 anova(CCU.full.mod, CCU.red.mod, test="Chisq")
 CCU.full.mod$aic
 CCU.red.mod$aic
-#significant and reduced models quite different as Age:Gender interaction kept. Unable to improve AIC without removing, neither are statistically different from the full model, AICs similar (dif <4)
-#keep significant model.
+#significant and reduced models quite different as Age:Gender interaction not kept in stepwise model. Unable to improve AIC without removing, neither are statistically different from the full model, AICs similar (dif <4)
+#compare brier scores
+mean((predict(CCU.sig.mod, type = "response") - ICUMort.CCU$in_hospital_death)^2)
+mean((predict(CCU.red.mod, type = "response") - ICUMort.CCU$in_hospital_death)^2)
+
+#fit better for significant model - keep
 CCU.mod <- CCU.sig.mod
 
 #MICU
-MICU.sig.mod <- glm(in_hospital_death ~ Bilirubin_min + BUN_min + Na_max + TroponinI_max +
-                       WBC_max + SAPS1 + Age:Gender, data=ICUMort.MICU, family="binomial")
+MICU.sig.mod <- glm(in_hospital_death ~ Bilirubin_min + BUN_min + Gender + Na_max + TroponinI_max +
+                       SAPS1 + Age:Gender, data=ICUMort.MICU, family="binomial")
 (sum.sig.MICU <- summary(MICU.sig.mod))
 anova(MICU.full.mod, MICU.sig.mod, test="Chisq")
 MICU.full.mod$aic
@@ -921,8 +943,8 @@ MICU.red.mod$aic
 MICU.mod <- MICU.red.mod
 
 #SICU
-SICU.sig.mod <- glm(in_hospital_death ~ Age + BUN_min + GCS_max + Glucose_diff + PaO2_diff + pH_diff + 
-                       Platelets_max + RespRate_min + WBC_min + SAPS1 + Age:Gender, data=ICUMort.SICU, family="binomial")
+SICU.sig.mod <- glm(in_hospital_death ~ Age + BUN_min + GCS_max + Glucose_max + RespRate_min +
+                      SAPS1 + Age:Gender, data=ICUMort.SICU, family="binomial")
 (sum.sig.SICU <- summary(SICU.sig.mod))
 anova(SICU.full.mod, SICU.sig.mod, test="Chisq")
 SICU.full.mod$aic
@@ -932,11 +954,15 @@ SICU.red.mod <- step(SICU.full.mod, trace=0)
 anova(SICU.full.mod, SICU.red.mod, test="Chisq")
 SICU.full.mod$aic
 SICU.red.mod$aic
-#not statistically different, AIC slightly improved in reduced model. Age and Gender in reduced model without interaction, keep reduced model
+#not statistically different, AIC slightly improved in reduced model. Age and Gender in reduced model without interaction
+#compare brier scores
+mean((predict(SICU.sig.mod, type = "response") - ICUMort.SICU$in_hospital_death)^2)
+mean((predict(SICU.red.mod, type = "response") - ICUMort.SICU$in_hospital_death)^2)
+#marginally better for reduced model
 SICU.mod <- SICU.red.mod
 
 
-CSRU.sig.mod <- glm(in_hospital_death ~ BUN_max + GCS_max + MAP_min + Na_diff + Platelets_max +
+CSRU.sig.mod <- glm(in_hospital_death ~ BUN_max + GCS_max + Na_diff + Platelets_max +
                       pH_max + SAPS1 + Age:Gender, data=ICUMort.CSRU, family="binomial")
 (sum.sig.CSRU <- summary(CSRU.sig.mod))
 anova(CSRU.full.mod, CSRU.sig.mod, test="Chisq")
@@ -947,7 +973,11 @@ CSRU.red.mod <- step(CSRU.full.mod, trace=0)
 anova(CSRU.full.mod, CSRU.red.mod, test="Chisq")
 CSRU.full.mod$aic
 CSRU.red.mod$aic
-#not statistically different, AIC improved in reduced model. AIC difference <1 between sig and red mod. Keep sig model.
+#not statistically different, AIC improved in reduced model. 
+#compare brier scores
+mean((predict(CSRU.sig.mod, type = "response") - ICUMort.CSRU$in_hospital_death)^2)
+mean((predict(CSRU.red.mod, type = "response") - ICUMort.CSRU$in_hospital_death)^2)
+#Keep red model.
 CSRU.mod <- CSRU.sig.mod
 
 
@@ -1020,32 +1050,25 @@ rownames(psudortbl) <- c("CCU.mod", "MICU.mod", "SICU.mod", "CSRU.mod","null_mod
 #round values for output
 round(psudortbl,4)
 
+
 ```
 
 
 ```{r multi unit analysis prediction}
-
-ICUMort.t[ICUMort.t$ICUType=="Coronary Care Unit",]
-
-ICUMort.t[ICUMort.t$ICUType=="Medical ICU",]
-
-ICUMort.t[ICUMort.t$ICUType=="Surgical ICU",]
-
-ICUMort.t[ICUMort.t$ICUType=="Cardiac Surgery Recovery Unit",]
-
+#create column for predicted probability
 ICUMort.t$predprob <- 0
 
+#populate probability for individual unit types across whole data set
 ICUMort.t[ICUMort.t$ICUType=="Coronary Care Unit",] %>% mutate(predprob=predict(CCU.mod, type="response")) -> ICUMort.t[ICUMort.t$ICUType=="Coronary Care Unit",]
-
 ICUMort.t[ICUMort.t$ICUType=="Medical ICU",] %>% mutate(predprob=predict(MICU.mod, type="response")) -> ICUMort.t[ICUMort.t$ICUType=="Medical ICU",]
-
 ICUMort.t[ICUMort.t$ICUType=="Surgical ICU",] %>% mutate(predprob=predict(SICU.mod, type="response")) -> ICUMort.t[ICUMort.t$ICUType=="Surgical ICU",]
-
 ICUMort.t[ICUMort.t$ICUType=="Cardiac Surgery Recovery Unit",] %>% mutate(predprob=predict(CSRU.mod, type="response")) -> ICUMort.t[ICUMort.t$ICUType=="Cardiac Surgery Recovery Unit",]
 
-ICUMort.t
+#brier score for overall model
+mean((ICUMort.t$predprob - ICUMort.t$in_hospital_death)^2)
+mean((pred_null - ICUMort.t$in_hospital_death)^2)
 
-
+#plot ROC for multi unit model
 par(pty="s")
 plot.roc(ICUMort.t$in_hospital_death, ICUMort.t$predprob, identity.col="black", legacy.axes=TRUE,
     auc.polygon = TRUE, auc.polygon.col=rgb(.9,0.1,0.1, alpha = 0.3), col="red", legend= TRUE, legend.title="models")
