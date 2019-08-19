@@ -1596,6 +1596,27 @@ ggcoxfunctional(cox.mv3,  data = ICUsurv.f, point.col = "blue", point.alpha = 0.
 ```
 
 ```{r Taks2_Part6.b}
+# add covariate x time interaction to resolve violations of the proportional hazards assumption
+
+# convert non-positive Days to NA
+ICUsurv.f$Days[ICUsurv.f$Days==0] <- NA
+# delete the rows associated with NA
+ICUsurv.f2<-ICUsurv.f[complete.cases(ICUsurv.f),]
+
+# splitting the old dataset to two time intervals around 41 days
+icu.split <- survSplit( Surv(Days, Status) ~ ., data = ICUsurv.f2, cut=c(41), episode= "tgroup")
+# fitting Cox multivariable model to the new dataset
+cox.mv5 <- coxph( Surv(Days, Status) ~ Age + BUN_max + SOFA:strata(tgroup) + HR_diff:strata(tgroup) + Na_diff + TroponinI_max + pH_diff + HCO3_min:strata(tgroup), data = icu.split) 
+summary(cox.mv5)
+# evaluating the proportional hazards assumption
+prop.mv2 <- cox.zph(cox.mv5)
+prop.mv2
+
+# The global test of the global null hypothesis that proportionality holds for our model is no longer significant (p-value=0.6406). 
+
+```
+
+```{r Taks2_Part6.c}
 # relative importance of covariates:
 # rank the covariate values and plot relative hazard against ranks
 
@@ -1611,7 +1632,7 @@ rankhazardplot(cox.mv3,  data = ICUsurv.f)
 
 ```
 
-```{r Taks2_Part6.c}
+```{r Taks2_Part6.d}
 # Testing influential observations:
 # plots the estimated changes in the regression coefficients upon deleting each observation in turn
 ggcoxdiagnostics(cox.mv3, type = "dfbeta",
@@ -1630,13 +1651,87 @@ ggcoxdiagnostics(cox.mv3, type = "deviance",
 
 ```
 
+```{r Taks2_Part6.e}
+# Parametric methods:
+
+library(eha)
+# Weibull model:
+w.mv1 <- phreg(Surv(Days, Status) ~ Age + BUN_max + SOFA + HR_diff + Na_diff + TroponinI_max + pH_diff + HCO3_min, data = ICUsurv.f)
+w.mv1
+print(drop1(w.mv1, test = "Chisq"))
+# plotting hazard, cumulative hazard, density and survivor functions
+plot(w.mv1)
+
+# at all event or censoring
+cut_times <- c(sort(unique(ICUsurv.f2$Days)), cut_one) %>% round()
+cut_times
+
+cut_100 <- seq(1, 2409, 100)
+cut_200 <- seq(1, 2409, 200)
+cut_300 <- seq(1, 2409, 300)
+cut_400 <- seq(1, 2409, 400)
+
+cut_days1 <- c(cut_100)
+cut_days2 <- c(cut_200)
+cut_days3 <- c(cut_300)
+cut_days4 <- c(cut_400)
+
+# fitting a piecewise constant hazards distribution with 100 days intervals
+pch100.mv1 <- phreg(Surv(Days, Status) ~ Age + BUN_max + SOFA + HR_diff + Na_diff + TroponinI_max + pH_diff + HCO3_min, data = ICUsurv.f, dist = "pch", cuts = cut_days1)
+pch100.mv1
+
+# fitting a piecewise constant hazards distribution with 200 days intervals
+pch200.mv1 <- phreg(Surv(Days, Status) ~ Age + BUN_max + SOFA + HR_diff + Na_diff + TroponinI_max + pH_diff + HCO3_min, data = ICUsurv.f, dist = "pch", cuts = cut_days2)
+pch200.mv1
+
+# fitting a piecewise constant hazards distribution with 300 days intervals
+pch300.mv1 <- phreg(Surv(Days, Status) ~ Age + BUN_max + SOFA + HR_diff + Na_diff + TroponinI_max + pH_diff + HCO3_min, data = ICUsurv.f, dist = "pch", cuts = cut_days3)
+pch300.mv1
+
+# fitting a piecewise constant hazards distribution with 400 days intervals
+pch400.mv1 <- phreg(Surv(Days, Status) ~ Age + BUN_max + SOFA + HR_diff + Na_diff + TroponinI_max + pH_diff + HCO3_min, data = ICUsurv.f, dist = "pch", cuts = cut_days4)
+pch400.mv1
+
+# plotting hazard, cumulative hazard, density and survivor functions
+plot(pch100.mv1)
+plot(pch200.mv1)
+plot(pch300.mv1)
+plot(pch400.mv1)
+
+# compare the maximized log likelihoods of the parametric models:
+# obtain maximized log likelihoods for the parametric models
+mll.mv1 <- c(w.mv1$loglik[2], pch100.mv1$loglik[2], pch200.mv1$loglik[2], pch300.mv1$loglik[2], pch400.mv1$loglik[2])
+names(mll.mv1) <- c("w", "pch100", "pch200", "pch300", "pch400")
+mll.mv1
+
+# The largest value is the best: w.mv1
+
+# second method of comparison of the model fit is graphical:
+# plot the cumulative hazard functions against the (non-parametric) estimate from a Cox regression fit, and judge which looks closest
+
+# fit a Cox model using the same response variable and coxreg function required by the check.dist function
+cox.mv6 <- coxreg(Surv(Days, Status) ~ Age + BUN_max + SOFA + HR_diff + Na_diff + TroponinI_max + pH_diff + HCO3_min, data = ICUsurv.f)
+
+check.dist(cox.mv6, w.mv1)
+check.dist(cox.mv6, pch100.mv1)
+check.dist(cox.mv6, pch200.mv1)
+check.dist(cox.mv6, pch300.mv1)
+check.dist(cox.mv6, pch400.mv1)
+# As shown in the plot below, pch100.mv1 model and w.mv1 model fit well. 
+# The piecewise constant hazards model fits better the more time intervals are used. 
+
+```
+
 ### Task 2 Part7
 Summarising the most important findings of final model:
 
 According to the output of Cox proportional hazards models above, all variables in the cox.mv3 model are significant. The p-value (<2e-16) for all three overall tests (likelihood ratio test, Wald test, and score test) are significant, indicating that the model is significant.
+
 The ggforest plot of cox.mv3 model shows hazard ratios (HR) for Age, BUN_max, SOFA, HR_diff, Na_diff, pH_diff and HCO3_min variables are greater than 1, which indicate an increased risk of death. The HR for TroponinI_max variable is less than 1, which indicates a decreased risk.
+
 From the rankhazard plot above, TroponinI_max is the most important determinant of survival at young age, but becomes less important for old age.
 
+The output from the proportional hazards test shows that the test is statistically significant for SOFA, HR_diff, and HCO3_min (but not for any other covariates). The global test is also statistically significant (p-value = 2.55e-08). Therefore, there appears to be a violation of the proportional hazards model. However, the violations of the proportional hazards assumption can be resloved by add covariate x time interaction. After splitting the old dataset to two time intervals around 41 days, the global test of the global null hypothesis that proportionality holds for our model is no longer significant (p-value=0.6406). 
 
 
 
