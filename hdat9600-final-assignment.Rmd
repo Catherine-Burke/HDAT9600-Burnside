@@ -1162,16 +1162,17 @@ In this task, you are required to develop a Cox proportional hazards survival mo
 
 ```{r data-setup}
 library(survival)
+# load the data
+icu_patients_df0 <- readRDS("icu_patients_df0.rds")
+icu_patients_df1 <- readRDS("icu_patients_df1.rds")
 ```
 
 ### Task 2 Part1.a
 ```{r Taks2_Part1a}
-# load the data
-icu_patients_df0 <- readRDS("icu_patients_df0.rds")
-icu_patients_df1 <- readRDS("icu_patients_df1.rds")
 #View(icu_patients_df1)
 head(icu_patients_df1)
 str(icu_patients_df1)
+class(icu_patients_df1)
 
 ```
 
@@ -1333,7 +1334,6 @@ summary(cox.s1)
 
 ### Task 2 Part1.b
 The categorical variables in the dataset that may be associated with a person’s survival are:
-in_hospital_death;
 ICUType;
 Gender.
 
@@ -1347,21 +1347,20 @@ all 3 summary variables for 36 clinical measures.
 
 ### Task 2 Part2
 ```{r Taks2_Part2.a}
+# Categorical variables:
+
+# There are only 2 categorical variables in this dataset that may be associated with a person’s survival. The non-parametric test (log-rank test) can be used to compare the survival curves of these categorical variables.
+# The null hypothesis is that there is no difference in survival between the two groups.
+
 # Basic exploratory data analysis for categorical variables:
 
-cat("Frequency for the categories of in_hospital_death variable")
+cat("Frequency for the categories of ICUType variable")
 # use table function to calculate frequency
-ihd_table <- table(icu_patients_df1$in_hospital_death)
+type_table <- table(icu_patients_df1$ICUType)
 # use addmargins function to add total to the table
-addmargins(ihd_table)
+addmargins(type_table)
 # calculate proportions from the frequency table
 # use round function to keep 2 decimal digit
-round(prop.table(ihd_table), digits=2)
-# As shown in the result: 0(survivor) = 86%; 1(died in-hospital) = 14% 
-
-cat("Frequency for the categories of ICUType variable")
-type_table <- table(icu_patients_df1$ICUType)
-addmargins(type_table)
 round(prop.table(type_table), digits=2)
 # As shown in the result: Coronary Care Unit=14%; Surgery Recovery Unit=22%; Medical ICU=38%; Surgical ICU=26%
 
@@ -1371,13 +1370,54 @@ addmargins(Gender_table)
 round(prop.table(Gender_table), digits=2)
 # As shown in the result: Female=44%; Male=56%
 
+
+
+surv_diff_ihs <- survdiff(Surv(Days, Status) ~ in_hospital_death, data = icu_patients_df1)
+surv_diff_ihs
+# the log rank test for difference in survival gives a p-value of p<2e-16 , indicating that the in_hospital_death differ significantly in survival.
+
+
+# select only the rows with death as an outcome
+hospitaldeath <- icu_patients_df1[icu_patients_df1$in_hospital_death == 1, ]
+
+# plot the Kaplan-Meier survival curves by the categorical variables
+
+par(mfrow=c(1,2))
+# plot the Kaplan-Meier survival curves by the categorical variables
+hd_fitbyGender <- survfit( Surv(Days,Status) ~ Gender, data = hospitaldeath) 
+summary(hd_fitbyGender)
+plot(hd_fitbyGender, main = 'Kaplan-Meier estimate of survival function', xlab = 'in-hospital death',col = c("red","blue"))
+
+hd_fitbytype <- survfit( Surv(Days,Status) ~ ICUType, data = hospitaldeath) 
+summary(hd_fitbytype)
+plot(hd_fitbytype, main = 'Kaplan-Meier estimate of survival function', xlab = 'ICU Type',col = c("red","blue","orange","black"))
+
+# calculate log-rank tests for differences in survival experience by the categorical variable
+# get the median survival times by in_hospital_death
+print(hd_fitbytype) 
+# 2-sample log-rank test
+hd_fitbytype2 <- coxph( Surv(Days,Status) ~ ICUType, data = hospitaldeath) 
+summary(hd_fitbytype2)
+
+surv_diff_ICU <- survdiff(Surv(Days, Status) ~ ICUType, data = hospitaldeath)
+surv_diff_ICU
+# the log rank test for difference in survival gives a p-value of p=0.4 , indicating that the ICUType does not differ significantly in survival.
+
+print(hd_fitbyGender) 
+# 2-sample log-rank test
+hd_fitbyGender2 <- coxph( Surv(Days,Status) ~ Gender, data = hospitaldeath) 
+summary(hd_fitbyGender2)
+
+surv_diff_gender <- survdiff(Surv(Days, Status) ~ Gender, data = hospitaldeath)
+surv_diff_gender
+# the log rank test for difference in survival gives a p-value of p=0.8 , indicating that the Gender does not differ significantly in survival.
+
+# In conclusion, the categorical variables, ICUType and Gender, will be excluded. 
+
 ```
 
 
 ```{r Taks2_Part2.b}
-# select only the rows with death as an outcome
-hospitaldeath <- icu_patients_df1[icu_patients_df1$in_hospital_death == 1, ]
-
 # Plot the overall Kaplan-Meier survival curve for the hospitaldeath data
 hd_fit <- survfit( Surv(Days,Status) ~ 1, data = hospitaldeath) 
 summary(hd_fit)
@@ -1400,190 +1440,162 @@ abline(a = 0.5, b = 0)
 plot(hd_fit, fun="cumhaz", main = "Nelson-Aalen estimate of cumulative hazard function", xlab = "Days")
 # As shown in the plot, the confidence interval becomes wider after 50 days. 
 
-# plot the Kaplan-Meier survival curves by the categorical variables
-par(mfrow=c(2,2))
-hd_fitbyihd <- survfit( Surv(Days,Status) ~ in_hospital_death, data = hospitaldeath) 
-summary(hd_fitbyihd)
-plot(hd_fitbyihd, main = 'Kaplan-Meier estimate of survival function', xlab = 'in-hospital death',col = c("red","blue"))
-# 0:survivor; 1:died in-hospital
-
-hd_fitbyGender <- survfit( Surv(Days,Status) ~ Gender, data = hospitaldeath) 
-summary(hd_fitbyGender)
-plot(hd_fitbyGender, main = 'Kaplan-Meier estimate of survival function', xlab = 'in-hospital death',col = c("red","blue"))
-
-hd_fitbytype <- survfit( Surv(Days,Status) ~ ICUType, data = hospitaldeath) 
-summary(hd_fitbytype)
-plot(hd_fitbytype, main = 'Kaplan-Meier estimate of survival function', xlab = 'ICU Type',col = c("red","blue","orange","black"))
-
-# calculate log-rank tests for differences in survival experience by the categorical variable
-# get the median survival times by in_hospital_death
-print(hd_fitbytype) 
-# 2-sample log-rank test
-hd_fitbytype2 <- coxph( Surv(Days,Status) ~ ICUType, data = hospitaldeath) 
-summary(hd_fitbytype2)
-
-print(hd_fitbyGender) 
-# 2-sample log-rank test
-hd_fitbyGender2 <- coxph( Surv(Days,Status) ~ Gender, data = hospitaldeath) 
-summary(hd_fitbyGender2)
 ```
-The non-significant log-rank test of equality of the survival function means that the null hypothesis cannot be rejected, and there is no significant difference between groups. The variables with non-significant log-rank test are ICUType (p-value = 0.4) and Gender (p-value = 0.8).
-
 
 ```{r Taks2_Part2.c}
-# remove observations that contain any missing values
-fitbyall <- coxph( Surv(Days,Status) ~ . , data = icu_patients_df1, na.action=na.omit) 
-summary(fitbyall)
+# Continuous variables:
 
-# sort p-value 
-fitallp <- data.frame(sort(summary(fitbyall)$coef[summary(fitbyall)$coef[,5] <= .05, 5], decreasing = FALSE))
-names(fitallp) <- "Pr(>|z|)"
-fitallp
+#remove incomplete variables to maintain data integrity
+ICUsurv <- icu_patients_df1[,complete.cases(t(icu_patients_df1))]
 
-# 11 most significant variables: 
-# ALP_max, ALP_min, Cholesterol_min, Creatinine_max, Creatinine_min
-# MAP_diff, MAP_max, NIMAP_min, pH_min, Urine_diff, Urine_max
+#ensure all max and min values are in the right columns
 
+#function to swap values that are inconsistent with allocation
+maxval <- function(df, Max, Min){
+  df[na.omit(df[,Max])<na.omit(df[,Min]),c(Min,Max)] <- unname(df[na.omit(df[,Max])<na.omit(df[,Min]),c(Max,Min)])
+  df
+}
+
+#loop checks for "max" variables then compares to the corresponding "min" value and swaps values where necessary
+for (i in names(ICUsurv)){
+  if (substr(i, nchar(i)-2, nchar(i)) == "max"){
+  j <- paste0(substr(i, 1, nchar(i)-4 ),"_min")
+  t.ICUsurv <- maxval(ICUsurv, i, j)
+  }
+}
+
+#dataframe with selected varialbles only
+ICUsurv.f <- ICUsurv[,c("SOFA", "Age", "Na_diff", "HR_diff", "K_diff", "Temp_max", "TroponinI_max", "BUN_max", "ALT_max", "HCO3_min", "Lactate_max", "WBC_min", "pH_diff", "HCT_min", "Status", "Days")]
+
+summary(ICUsurv.f[,c("SOFA", "Age", "Na_diff", "HR_diff", "K_diff", "Temp_max", "TroponinI_max", "BUN_max", "ALT_max", "HCO3_min", "Lactate_max", "WBC_min", "pH_diff", "HCT_min", "Status", "Days")])
 ```
 
 
 ```{r Taks2_Part2.d}
-# Basic exploratory data analysis on variables of choice
+# fit multivariable Cox proportional hazards models with selected varialbles only
+fitbyall <- coxph( Surv(Days,Status) ~ SOFA + Age + Na_diff + HR_diff + K_diff + Temp_max + TroponinI_max + BUN_max + ALT_max + HCO3_min + Lactate_max + WBC_min +  pH_diff + HCT_min, data = ICUsurv.f) 
+summary(fitbyall)
 
-# ALP_max, ALP_min, Cholesterol_min, Creatinine_max, Creatinine_min
-# MAP_diff, MAP_max, NIMAP_min, pH_min, Urine_diff, Urine_max
+# sort and rank p-value for selected varialbles
+fitallp <- data.frame(sort(summary(fitbyall)$coef[summary(fitbyall)$coef[,5] <= .05, 5], decreasing = FALSE))
+names(fitallp) <- "Pr(>|z|)"
+fitallp
 
-summary(icu_patients_df1[,c("ALP_max","ALP_min","Cholesterol_min","Creatinine_max","Creatinine_min",
-                            "MAP_diff","MAP_max","NIMAP_min","pH_min","Urine_diff", "Urine_max")])
+# As shown in the result below, there are 8 significant variables, Age, BUN_max, SOFA, HR_diff, Na_diff, TroponinI_max, pH_diff, HCO3_min
 
 ```
 
 ### Task 2 Part3
 ```{r Taks2_Part3}
 # fit Cox PH Model to significant predictor variables
-vars_3 <- c("ALP_max", "ALP_min", "Cholesterol_min", "Creatinine_max", "Creatinine_min", "MAP_diff", "MAP_max", "NIMAP_min", "pH_min", "Urine_diff", "Urine_max")
+vars_3 <- c("Age", "BUN_max", "SOFA", "HR_diff", "Na_diff", "TroponinI_max", "pH_diff", "HCO3_min")
 
 univ_formulas <- sapply(vars_3, function(x)as.formula(paste('Surv(Days,Status)~',x)))
-univ_models <- lapply(univ_formulas, function(x){coxph(x,data=icu_patients_df1)})
+univ_models <- lapply(univ_formulas, function(x){coxph(x,data=ICUsurv.f)})
 
 univ_results <- lapply(univ_models, function(x){summary(x)})
 univ_results
+
+# Age:
+# The maximum likelihood estimate of the regression coefficient (coef) for Age is 0.03355 (a positive sign means that the hazard (risk of death) is higher), and thus hazard ratio is exp(0.0012183) = 1.03412.  
+# The wald statistic evaluates, whether the beta coefficient of a given variable is statistically significantly different from 0. From the output below, we can conclude that the variable Age have statistically significant coefficients (p-value<2e-16).
+#The output also provides a 95% confidence interval for Age, 1.029 to 1.039.
+# Finally, the output gives p-values for three alternative tests for overall significance of the model: the likelihood-ratio test, Wald test, and score logrank statistics. As shown in the result, the p-value for the overall significance of the model is less than 0.05. 
+
+# In conclusion, the p-values for overall significance of the univariate Cox proportional hazards models for Age, BUN_max, SOFA, HR_diff, Na_diff, pH_diff, and HCO3_min are less than 0.05. The p-value for the overall significance of the model with TroponinI_max predictor is greater than 0.05. 
+
 ```
-
-The maximum likelihood estimate of the regression coefficient (coef) for ALP_max is 0.0012183 (a positive sign means that the hazard (risk of death) is higher), and thus hazard ratio for ALP_max is exp(0.0012183) = 1.0012190.  
-The wald statistic evaluates, whether the beta coefficient of a given variable is statistically significantly different from 0. From the output above, we can conclude that the variable ALP_max have statistically significant coefficients (p-value=0.000399).
-The output also provides a 95% confidence interval for ALP_max, 1.001 to 1.002.  
-Finally, the output gives p-values for three alternative tests for overall significance of the model: the likelihood-ratio test, Wald test, and score logrank statistics. As shown in the result, the p-value for the overall significance of the model is less than 0.05. 
-
-
-Non-significant: MAP_max
-
-
 
 ### Task 2 Part4
 ```{r Taks2_Part4}
-# fit multivariable Cox proportional hazards models with significant variables above
-cox.mv1 <- coxph(Surv(Days, Status) ~ ALP_max + ALP_min + Cholesterol_min + Creatinine_max + Creatinine_min + MAP_diff  +  MAP_max + NIMAP_min + pH_min + Urine_diff + Urine_max, data = icu_patients_df1, na.action=na.omit)
+# fit multivariable Cox proportional hazards models with significant univariate Cox proportional hazards models 
+cox.mv1 <- coxph(Surv(Days, Status) ~ Age + BUN_max + SOFA + HR_diff + Na_diff + pH_diff + HCO3_min, data = ICUsurv.f)
 summary(cox.mv1)
 
-# Not significant in multivariable model
-# ALP_max, ALP_min, Creatinine_max, Creatinine_min, MAP_diff, MAP_max
+# As shown in the output below, variable HCO3_min is not significant in multivariable model. The p-value for the overall significance of the model is less than 0.05 (p=<2e-16). 
 
-# fit multivariable Cox proportional hazards models with significant univariate Cox proportional hazards models
-cox.mv2 <- coxph(Surv(Days, Status) ~ ALP_max + ALP_min + Cholesterol_min + Creatinine_max + Creatinine_min + MAP_diff  + NIMAP_min + pH_min + Urine_diff + Urine_max, data = icu_patients_df1, na.action=na.omit)
+# fit multivariable Cox proportional hazards models with only significant variables above (exclude HCO3_min)
+cox.mv2 <- coxph(Surv(Days, Status) ~ Age + BUN_max + SOFA + HR_diff + Na_diff + pH_diff, data = ICUsurv.f)
 summary(cox.mv2)
 
-# Not significant in multivariable model
-# ALP_max, ALP_min, Creatinine_max, Creatinine_min
+# As shown in the output below, all variables in the multivariable model are significant. The p-value for the overall significance of the model is less than 0.05 (p=<2e-16)
 
-# The p-value (<2e-16) for all three overall tests (likelihood ratio test, Wald test, and score test) are significant, indicating that the model is significant.
-
-cox.mv3 <- coxph(Surv(Days, Status) ~ Cholesterol_min + NIMAP_min + pH_min + Urine_diff + Urine_max, data = icu_patients_df1, na.action=na.omit)
+# fit multivariable Cox proportional hazards models with selected variables from part 3
+cox.mv3 <- coxph(Surv(Days, Status) ~ Age + BUN_max + SOFA + HR_diff + Na_diff + TroponinI_max + pH_diff + HCO3_min, data = ICUsurv.f)
 summary(cox.mv3)
 
+# As shown in the output below, all variables in the multivariable model are significant. The p-value (<2e-16) for all three overall tests (likelihood ratio test, Wald test, and score test) are significant, indicating that the model is significant.
+
+# fit multivariable Cox proportional hazards models with selected variables from part 2
+cox.mv4 <- coxph(Surv(Days, Status) ~ SOFA + Age + Na_diff + HR_diff + K_diff + Temp_max + TroponinI_max + BUN_max + ALT_max + HCO3_min + Lactate_max + WBC_min +  pH_diff + HCT_min, data = ICUsurv.f)
+summary(cox.mv4)
+
+# As shown in the output below, variables K_diff, Temp_max, ALT_max, Lactate_max, WBC_min, and HCT_min in the multivariable model are not significant. The p-value (<2e-16) for all three overall tests (likelihood ratio test, Wald test, and score test) are significant, indicating that the model is significant.
+
+# Visualize Cox proportional hazards models
+survminer::ggforest(cox.mv1, data=ICUsurv.f)
+survminer::ggforest(cox.mv2, data=ICUsurv.f)
+survminer::ggforest(cox.mv3, data=ICUsurv.f)
+survminer::ggforest(cox.mv4, data=ICUsurv.f)
+
+# The plot shows hazard ratios (HR) which are derived from the model for all covariates that included in the formula in coxph. 
+# HR > 1 indicates an increased risk of death;
+# HR < 1 indicates a decreased risk. 
+
+# The likelihood ratio test (LRT) can be used to select model.
 print(anova(cox.mv1, cox.mv2))
 print(anova(cox.mv2, cox.mv3))
+print(anova(cox.mv3, cox.mv4))
 
+# If the p-value is not sufficiently low (usually greater than 0.05), we should favor the simpler model. 
+# As shown in the result below, the p-value (0.08507) for cox.mv1 and cox.mv2 is not significant, thus cox.mv2 will be chosen. The p-value (0.001431) for cox.mv2 and cox.mv3 is significant, thus cox.mv3 will be chosen. Lastly, the p-value (0.3895) for cox.mv3 and cox.mv4 is not significant, thus cox.mv3 will be chosen.
 
-# If the p-value is not sufficiently low (usually greater than 0.05), we should favor the simpler model
-# As shown in the result above, the p-value (0.7971) is not significant, cox.mv2 will be chosen.
-#  p-value (0.009266) is significant, cox.mv2 will be chosen.
+# The likelihood ratio test can be used to test if all the variables should be retained in the multivariable model.
+print(drop1(cox.mv2, test="Chisq"))
+print(drop1(cox.mv3, test="Chisq"))
+# As shown in the result, the p-values for all the tests are small (<0.05) which indicates that all the variables are significant and should be retained in the cox.mv2 and cox.mv3 model.
 
-
-# the AICs for the two models
+# calculate the AICs for the multivariable models
 extractAIC(cox.mv1)
 extractAIC(cox.mv2)
 extractAIC(cox.mv3)
-extractAIC(cox.multi)
-
-# Higher (worse) AIC for the cox.mv3 model
-
+extractAIC(cox.mv4)
+# Higher (worse) AIC for the cox.mv2 model. The cox.mv3 multivariable model has lowest AIC (11098.45). 
 
 ```
-
 
 ### Task 2 Part5
 ```{r Taks2_Part5}
-# final model:
-cox.mv2 <- coxph(Surv(Days, Status) ~ ALP_max + ALP_min + Cholesterol_min + Creatinine_max + Creatinine_min + MAP_diff  + NIMAP_min + pH_min + Urine_diff + Urine_max, data = icu_patients_df1, na.action=na.omit)
-summary(cox.mv2)
-
+# Present the final model:
+cox.mv3 <- coxph(Surv(Days, Status) ~ Age + BUN_max + SOFA + HR_diff + Na_diff + TroponinI_max + pH_diff + HCO3_min, data = ICUsurv.f)
+survminer::ggforest(cox.mv3, data=ICUsurv.f)
 ```
 
 ### Task 2 Part6
-
-
-Using semi-parametric methods:
-advantage of Cox Proportional Hazards regression:
-fit survival models without assuming the distribution
-
-
 ```{r Taks2_Part6.a}
-# diagnostic statistics
-# graphical diagnostic
+# Diagnostic statistics:
 
+# Assessing the proportional hazards assumption:
 # testing for proportional hazards assumption using cox.zph()
-prop.mv1 <- cox.zph(cox.mv2)
+prop.mv1 <- cox.zph(cox.mv3)
 prop.mv1
 # scaled Schoenfeld residuals against the transformed time
-
 library("survminer")
 ggcoxzph(prop.mv1)
+# Interpretation of the graph: if it is fairly flat, the assumption of proportionality is not (much) violated. 
+# The proportional hazard assumption is supported by a non-significant relationship between residuals and time, while a significant relationship favours the null of non-constant hazards. 
+# A significant P value indicates that the proportional hazards assumption is violated for that covariate.
+# The output from the proportional hazards test shows that the test is statistically significant for SOFA, HR_diff, and HCO3_min (but not for any other covariates). The global test is also statistically significant (p-value = 2.55e-08). Therefore, there appears to be a violation of the proportional hazards model.  
 
-# interpretation of the graph in its most simplest way is how curved it is: 
-# if it is fairly flat, the assumption of proportionality is not (much) violated
-
-```
-
-The output from the proportional hazards test shows that the test is statistically significant (p-value < 0.05) for ALP_max, ALP_min, Urine_diff, and Urine_max variable. The global test is also statistically significant (p-value = 1.52e-04). 
-
-
-ALP_max, ALP_min, Urine_diff, and Urine_max variable:
-violates the PH assumption, resulting in strong evidence of non-proportional hazards for the global model
-
-
-
-
-
-
-```{r}
-# assume that continuous covariates have a linear form
-
+# Assessing linearity: assume that continuous covariates have a linear form
 # plot the Martingale residuals against continuous covariates can be used to detect nonlinearity 
 # graphs of continuous covariates against martingale residuals of null cox proportional hazards model
-ggcoxfunctional(Surv(Days, Status) ~ ALP_max + log(ALP_max) + sqrt(ALP_max), data = icu_patients_df1)
-ggcoxfunctional(Surv(Days, Status) ~ ALP_max + log(ALP_min) + sqrt(ALP_min), data = icu_patients_df1)
-ggcoxfunctional(Surv(Days, Status) ~ Urine_diff + log(Urine_diff) + sqrt(Urine_diff), data = icu_patients_df1)
-
-
-# Patterns of Urine_diff in the plot may suggest that the variable is not properly fit.
+ggcoxfunctional(cox.mv3,  data = ICUsurv.f, point.col = "blue", point.alpha = 0.5)
+# only the patterns of Age in the plot suggest that the variable is properly fit.
 
 ```
 
-
-
-
-```{r}
+```{r Taks2_Part6.b}
 # relative importance of covariates:
 # rank the covariate values and plot relative hazard against ranks
 
@@ -1591,97 +1603,39 @@ ggcoxfunctional(Surv(Days, Status) ~ Urine_diff + log(Urine_diff) + sqrt(Urine_d
 # reference hazard is related to the median of covariates
 # relative hazard can vary depending on the distribution of covariate values in a population
 
-
 library("rankhazard")
-cox.mv2 <- coxph(Surv(Days, Status) ~ ALP_max + ALP_min + Cholesterol_min + Creatinine_max + Creatinine_min + MAP_diff  + NIMAP_min + pH_min + Urine_diff + Urine_max, data = icu_patients_df1, na.action=na.omit, x=TRUE)
-
-rankhazardplot(cox.mv2, data= icu_patients_df1)
-
-
-
+cox.mv3 <- coxph(Surv(Days, Status) ~ Age + BUN_max + SOFA + HR_diff + Na_diff + TroponinI_max + pH_diff + HCO3_min, data = ICUsurv.f, x=TRUE)
+rankhazardplot(cox.mv3,  data = ICUsurv.f)
 # horizontal axis: the minimum, first quartile, median, third quartile and maximum values of each covariate are reported
+# From the plot below,  TroponinI_max is the most important determinant of survival at young age, but becomes less important for old age.
 
 ```
 
-
-```{r}
-# Hazard ratio curves for continuous predictors:
-# Cox proportional hazards model assumes that the continuous predictors are in linear association with log-hazard
-
-# relationship between continuous predictor and hazard ratio helps investigators to check for the linearity assumption
-
-library("splines")
-library("smoothHR")
-
-cox.mv2 <- coxph(Surv(Days, Status) ~ ALP_max + ALP_min + Cholesterol_min + Creatinine_max + Creatinine_min + MAP_diff  + NIMAP_min + pH_min + Urine_diff + Urine_max, data = icu_patients_df1, na.action=na.omit, x=TRUE)
-
-hrplot <- smoothHR(data = icu_patients_df1, coxfit = cox.mv2)
-
-plot(hrplot, predictor= "Creatinine_max", prob = 0, conf.level = 0.95)
-
-```
-
-
-```{r}
-
+```{r Taks2_Part6.c}
+# Testing influential observations:
 # plots the estimated changes in the regression coefficients upon deleting each observation in turn
-ggcoxdiagnostics(cox.mv2, type = "dfbeta",
-                 linear.predictions = FALSE, ggtheme = theme_bw())
+ggcoxdiagnostics(cox.mv3, type = "dfbeta",
+                 linear.predictions = FALSE, 
+                 ggtheme = theme_bw())
 
+# check outliers by visualizing the deviance residuals
+# deviance residual is a normalized transform of the martingale residual
+# residuals should be roughtly symmetrically distributed about zero with a standard deviation of 1.
+ggcoxdiagnostics(cox.mv3, type = "deviance",
+                 linear.predictions = FALSE, 
+                 ggtheme = theme_bw())
 
-ggcoxdiagnostics(cox.mv2, type = "deviance",
-                 linear.predictions = FALSE, ggtheme = theme_bw())
-
-
-```
-
-
-
-```{r}
-# Parametric methods:
-
-
-w.mv1 <- eha::phreg(Surv(Days, Status) ~ ALP_max + ALP_min + Cholesterol_min + Creatinine_max + Creatinine_min + MAP_diff  + NIMAP_min + pH_min + Urine_diff + Urine_max, data = icu_patients_df1, na.action=na.omit)
-plot(w.mv1)
-
-pch800.mv1 <- eha::phreg(Surv(Days, Status) ~ ALP_max + ALP_min + Cholesterol_min + Creatinine_max + Creatinine_min + MAP_diff  + NIMAP_min + pH_min + Urine_diff + Urine_max, data = icu_patients_df1, na.action=na.omit, dist = "pch", cuts = c(800))
-
-pch1800.mv1 <- eha::phreg(Surv(Days, Status) ~ ALP_max + ALP_min + Cholesterol_min + Creatinine_max + Creatinine_min + MAP_diff  + NIMAP_min + pH_min + Urine_diff + Urine_max, data = icu_patients_df1, na.action=na.omit, dist = "pch", cuts = c(1800))
-
-
-
-mll.mv1 <- c(w.mv1$loglik[2], pch800.mv1$loglik[2], pch1800.mv1$loglik[2])
-names(mll.mv1) <- c("w", "pch800", "pch1800")
-mll.mv1
-
-# The largest value is the best. 
-
-cox.mv2 <- eha::coxreg(Surv(Days, Status) ~ ALP_max + ALP_min + Cholesterol_min + Creatinine_max + Creatinine_min + MAP_diff  + NIMAP_min + pH_min + Urine_diff + Urine_max, data = icu_patients_df1, na.action=na.omit)
-
-# check graphical goodness-of-fit test
-eha::check.dist(cox.mv2, w.mv1)
-eha::check.dist(cox.mv2, pch800.mv1)
-eha::check.dist(cox.mv2, pch1800.mv1)
-
+# Positive values correspond to individuals that “died too soon” compared to expected survival times.
+# Negative values correspond to individual that “lived too long”.
 
 ```
-
 
 ### Task 2 Part7
-summarising the most important findings of final model:
+Summarising the most important findings of final model:
 
-
-
-
-
-
-
-
-
-
-
-
-
+According to the output of Cox proportional hazards models above, all variables in the cox.mv3 model are significant. The p-value (<2e-16) for all three overall tests (likelihood ratio test, Wald test, and score test) are significant, indicating that the model is significant.
+The ggforest plot of cox.mv3 model shows hazard ratios (HR) for Age, BUN_max, SOFA, HR_diff, Na_diff, pH_diff and HCO3_min variables are greater than 1, which indicate an increased risk of death. The HR for TroponinI_max variable is less than 1, which indicates a decreased risk.
+From the rankhazard plot above, TroponinI_max is the most important determinant of survival at young age, but becomes less important for old age.
 
 
 
