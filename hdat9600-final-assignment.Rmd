@@ -897,11 +897,15 @@ HCT_min also not significant. Also this is related to pH - remove.
 Leave others in for now. 
 
 ```{r}
+library(survival)
+#cox.multi <- coxph(Surv(Days,Status) ~ SOFA + Age + Gender + ICUType + Na_diff + HR_diff + K_diff + Temp_max + BUN_max + ALT_max + Lactate_max + WBC_min + pH_diff + HCT_min, data=ICUsurv.f)
 
-cox.multi <- coxph(Surv(Days,Status) ~ SOFA + Age + Gender + ICUType + Na_diff + HR_diff + K_diff + Temp_max + BUN_max + ALT_max + Lactate_max + WBC_min + pH_diff + HCT_min, data=ICUsurv.f)
+#summary(cox.multi)
 
-summary(cox.multi)
 
+c2 <- coxph(Surv(Days,Status) ~ SAPS1 + Age + Gender + ICUType + Na_diff + HR_diff + K_diff + Temp_max + BUN_max + ALT_max + Lactate_max + WBC_min + pH_diff + HCT_min, data=icu_patients_df1)
+summary(c2)
+extractAIC(c2)
 
 
 ```
