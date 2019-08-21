@@ -567,7 +567,7 @@ f.mod3$aic
 
 ```{r, Task1, goodness of fit}
 
-#possible models - sig_full_mod (fmod.1), red_int_mod (fmod.2), red_full_int_mod (fmod.3)
+#possible models - sig_full_mod (f.mod1), red_int_mod (f.mod2), red_full_int_mod (f.mod3)
 
 #Calculate the Hosmer-Lemeshow statistic
 #linear predictors
@@ -955,7 +955,7 @@ pred_oc_ICUmods <-as.factor(ifelse(ICUMort.t$predprob < 0.5, "no", "yes"))
 
 ```
 
-In general, for all the models tested the sensitivity was relatively low, and the positive predictive value somewhere between 50-60%.  This means that only ~20% of people that die would be identified as at high risk, and of the people identified as at high risk, about half of them are incorrectly classified.  Despite this, a single model (i.e. model 3) would still be useful if the aim was to predict which patients may be at higher risk of death and allocate resources accordingly.  
+In general, for all the models tested the sensitivity was relatively low, and the positive predictive value somewhere between 50-60%.  This means that only ~20% of people that die would be identified as at high risk, and of the people identified as at high risk, about half of them are incorrectly classified.  Despite this, a single model (i.e. model 3) would still be useful if the aim was to predict which patients may be at higher risk of death and allocate resources accordingly.  In model 3 (multivariable + interactions), ICUType had the highest affect on risk of death in the model with risk of death increased by 600%!  However, in the multivariable model without interactions, SAPS1 has the strongest affect on risk of death, increasing by ~ 9% per unit increase of SAPS1.
 
 However if the aim is to identify risk factors for death in hospital, the models split by ICU type would be more appropraiate, as patients in different ICU units may have different risk factors for death.
 
