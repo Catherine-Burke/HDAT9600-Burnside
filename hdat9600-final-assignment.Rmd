@@ -333,51 +333,71 @@ summary(ICUMort.f)
 str(ICUMort.f)
 
 #density plots for reviewing variables based on outcome
-for (i in names(ICUMort.f)){
+#Create empty list to store plots
+plot_list <- list()
+for (i in names(ICUMort.f)[1:12]){
   
   if(is.numeric(ICUMort.f[[i]])){
   
-    print(ggplot(ICUMort.f, aes(ICUMort.f[[i]])) +
+    plot_list[[i]] <- ggplot(ICUMort.f, aes_string(i)) +
           geom_histogram(aes(y = ..density.., fill = factor(in_hospital_death, labels = c("No","Yes"))), alpha = .3, bins = 60, position = "identity") +
-          labs(x=i, fill="Died", title = paste0("Density Plot of ", i,", ", length(na.omit(ICUMort.f[[i]]))," values available")))
+          labs(x=i, fill="Died", title = paste0("Density Plot of ", i,", ", length(na.omit(ICUMort.f[[i]]))," values available")) + 
+      theme(text = element_text(size=6))
 
     }else{
 
-    print(ggplot(ICUMort.f, aes(ICUMort.f[[i]], fill=factor(in_hospital_death, labels = c("No", "Yes")))) +
-          geom_bar(position = "fill") +
-          labs(x = i, fill = "Died", title = paste0("Bar Plot of ", i,", ",  length(na.omit(ICUMort.f[[i]])), " values available")))
+    plot_list[[i]] <- ggplot(ICUMort.f, aes_string(i)) +
+          geom_bar(position = "fill", aes(fill=factor(in_hospital_death, labels = c("No", "Yes")))) +
+          labs(x = i, fill = "Died", title = paste0("Bar Plot of ", i,", ",  length(na.omit(ICUMort.f[[i]])), " values available")) +
+      theme(text = element_text(size=6))
  
   }
 }
+library(gridExtra)
+n <- length(plot_list)
+nCol <- 4
+do.call("grid.arrange", c(plot_list, ncol=nCol))
 
-#review relationships with gender 
-for (i in names(ICUMort.f[,names(ICUMort.f)!="in_hospital_death"])){
-      
-        if(is.numeric(ICUMort.f[[i]])){
-        
-          ybl <- boxplot.stats(ICUMort.f[[i]])$stats[c(1, 5)]
-          ybl <- ybl * c(.75,1.25)
-          print(ggplot(ICUMort.f, aes(Gender,ICUMort.f[[i]], fill = factor(in_hospital_death, labels = c("No","Yes")))) +
-                geom_boxplot(outlier.colour = NA) + coord_cartesian(ylim = ybl) +
-                labs(y=i, fill="Died", title = paste0("Density Plot of ", i,", ", length(na.omit(ICUMort.f[[i]]))," values available"))) 
+#review relationships with gender
+#Create empty list for plotting
+plot_list2 <- list()
+for (i in names(ICUMort.f)[1:12]){
+  if(is.numeric(ICUMort.f[[i]])){
+    ybl <- boxplot.stats(ICUMort.f[[i]])$stats[c(1, 5)]
+    ybl <- ybl * c(.75,1.25)
+    plot_list2[[i]] <- ggplot(ICUMort.f, aes_string(x = "Gender", y=i)) + 
+            geom_boxplot(outlier.colour = NA,
+                         aes(fill = factor(in_hospital_death, 
+                                           labels = c("No","Yes")))) + 
+            coord_cartesian(ylim = ybl) +
+            labs(y=i, fill="Died", 
+                 title = paste0("Density Plot of ", i,",\n",
+                                length(na.omit(ICUMort.f[[i]]))," values available")) + theme(text = element_text(size=6))
       
           }
 }
+do.call("grid.arrange", c(plot_list2, ncol=nCol))
 #possible interactions: Glucose:Gender, BUN:Gender, RespRate:Gender, Age:Gender
 
 #review relationships with ICUtype
-for (i in names(ICUMort.f[,names(ICUMort.f)!="in_hospital_death"])){
-      
-        if(is.numeric(ICUMort.f[[i]])){
-        
-          ybl <- boxplot.stats(ICUMort.f[[i]])$stats[c(1, 5)]
-          ybl <- ybl * c(.75,1.25)
-          print(ggplot(ICUMort.f, aes(ICUType,ICUMort.f[[i]], fill = factor(in_hospital_death, labels = c("No","Yes")))) +
-                geom_boxplot(outlier.colour = NA) + coord_cartesian(ylim = ybl) +
-                labs(y=i, fill="Died", title = paste0("Density Plot of ", i,", ", length(na.omit(ICUMort.f[[i]]))," values available"))) 
+plot_list3 <- list()
+for (i in names(ICUMort.f[1:12])){
+  if(is.numeric(ICUMort.f[[i]])){
+    ybl <- boxplot.stats(ICUMort.f[[i]])$stats[c(1, 5)]
+    ybl <- ybl * c(.75,1.25)
+    plot_list3[[i]] <- 
+      ggplot(ICUMort.f, aes_string(x = "ICUType", y = i)) +
+      geom_boxplot(outlier.colour = NA, aes(fill = factor(in_hospital_death, 
+                                                labels = c("No","Yes")))) + 
+      coord_cartesian(ylim = ybl) +
+      labs(y=i, fill="Died", 
+           title = paste0("Density Plot of ", i,",\n ",                                                length(na.omit(ICUMort.f[[i]])),
+                          " values available")) + 
+      theme(text = element_text(size = 6))
       
           }
 }
+do.call("grid.arrange", c(plot_list3, ncol = nCol))
 #possible interactions: all variables appear to have some interaction with ICU type. Explored further later.
 
 
@@ -388,14 +408,15 @@ corrplot(ICUMort.cor,  method = "circle", type = "upper")
 
 #further explore noted correlations
 #unexpected correlation
-ggplot(ICUMort.f, aes(RespRate_min, GCS_max, colour = factor(in_hospital_death, labels = c("No","Yes")))) + geom_point(position = "jitter") + geom_smooth(method="lm") + labs(colour="Died")
+plot_1 <-ggplot(ICUMort.f, aes(RespRate_min, GCS_max, colour = factor(in_hospital_death, labels = c("No","Yes")))) + geom_point(position = "jitter") + geom_smooth(method="lm") + labs(colour="Died")
 
 #PaO2 not part of SAPS1, unexpected correlation
-ggplot(ICUMort.f, aes(PaO2_max, SAPS1, colour = factor(in_hospital_death, labels = c("No","Yes")))) + geom_point(position = "jitter") + geom_smooth(method="lm") + labs(colour="Died")
+plot_2 <- ggplot(ICUMort.f, aes(PaO2_max, SAPS1, colour = factor(in_hospital_death, labels = c("No","Yes")))) + geom_point(position = "jitter") + geom_smooth(method="lm") + labs(colour="Died")
 
 #GCS part of SAPS1 score - expected correlation
-ggplot(ICUMort.f, aes(GCS_max, SAPS1, colour = factor(in_hospital_death, labels = c("No","Yes")))) + geom_point(position = "jitter") + geom_smooth(method="lm") + labs(colour="Died")
+plot_3 <- ggplot(ICUMort.f, aes(GCS_max, SAPS1, colour = factor(in_hospital_death, labels = c("No","Yes")))) + geom_point(position = "jitter") + geom_smooth(method="lm") + labs(colour="Died")
 
+grid.arrange(plot_1, plot_2, plot_3, ncol = 2)
 ```
 
 ##Fit Univariate Models
