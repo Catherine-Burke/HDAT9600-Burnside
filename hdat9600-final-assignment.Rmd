@@ -178,6 +178,7 @@ In this task, you are required to develop a logistic regression model using the 
 **Create your response to this task here, as a mixture of embedded (`knitr`) R code and any resulting outputs, and explanatory or commentary text.** 
 ```{r, setup for task1}
 library(tidyverse)
+library(ggplot2)
 ```
 ##Jason
 ##Consideration for variables
@@ -189,7 +190,7 @@ We only need to include 5-10ish variables. This is requires a logical approach t
 nalist <- sapply(icu_patients_df1, function(x) sum(is.na(x)))
 nalist[nalist!=0]
 
-#check data for internal consistency (max vs min values)
+#check data for internal consistency (max vs min values).  Prints the number of instances where the max value is smaller than the min value.
 for (i in names(icu_patients_df1)){
   if (substr(i, nchar(i)-2, nchar(i)) == "max"){
   j <- paste0(substr(i, 1, nchar(i)-4 ),"_min")
@@ -327,7 +328,7 @@ ICUMort.f <- ICUMort.f[complete.cases(ICUMort.f),]
 ```
 
 ##EDA
-```{r review of selected variables}
+```{r eda}
 summary(ICUMort.f)
 str(ICUMort.f)
 
@@ -397,20 +398,23 @@ ggplot(ICUMort.f, aes(GCS_max, SAPS1, colour = factor(in_hospital_death, labels 
 
 ```
 
+##Fit Univariate Models
 
-```{r, univariate models}
+```{r, task 1 univariate models}
 
 #Should start with univariate models for each of the variables we included.
 #Create vector of variables
 summary(glm(in_hospital_death ~ . , family = binomial(), data = ICUMort.f))
 var_selection <- c("SAPS1", "Age", "Bilirubin_diff", "BUN_min", "GCS_max", "ICUType", "MAP_max", "PaO2_max", "Platelets_diff", "RespRate_min", "WBC_max", "Gender", "in_hospital_death")
 #Create a list of univariate models for each of the variables selected
-formulas<- paste('in_hospital_death ~', var_selection)
+formulas<- paste('in_hospital_death ~', var_selection[1:12])
 unimod_list <- lapply(formulas, glm, family = binomial(), data = ICUMort.f)
 #Summary of all models
 unimod_summ <- lapply(unimod_list, summary)
 unimod_summ
-#All variables except Na_max and sex are significant in univariate models
+#Pull out P values
+lapply(unimod_summ, function(x) {(coef(x)[,4])})
+#All variables except MAP_max, WBC_max and Gender are significant in univariate models
 #Extract exp of coefficients - odds for each variable
 unimod_odds <- lapply(unimod_list, function(x) {exp(coef(x))})
 unimod_odds
@@ -426,8 +430,13 @@ unimod_int_summ
 
 ```
 
+Most variables which were significant in the univariate models appear to individually have a small effect on the risk of death.  Variables that increase the risk of death with aunit increase of the variable include SAPS1, Age, Bilirubin_diff, BUN_min, Platelets_diff and RespRate_min, with all increasing risk by between 0.1% - 13%. Variable that decrease risk were GCS_max (~16%), and PaO2_max (0.002%).
 
-```{r, multivariate models}
+There are also many significant interactions between Age, Gender, ICUType and other variables.
+
+##Fit Mutivariable Models
+
+```{r, task 1 multivariate models}
 #Only include statisically significant variables from above. cut off 0.05.
 full_mod<-glm(in_hospital_death ~ SAPS1 + Age + Bilirubin_diff + BUN_min + GCS_max + ICUType + PaO2_max + 
                 Platelets_diff + RespRate_min, family = binomial(), data = ICUMort.f)
@@ -449,16 +458,16 @@ red_full_mod <- step(full_mod, trace = 0)
 anova(red_full_mod, sig_full_mod, test = "Chisq")
 red_full_mod$aic
 sig_full_mod$aic
-#test not significant, AIC similar, we can accept the simpler model - sig_full_mod
-f.mod1 <- sig_full_mod
+#test not significant, AIC similar, we can accept the simpler model with PaO2 removed - sig_full_mod
+f.mod1 <- sig_full_mod ##SHould this be red_full_mod??
 
 #Statistically significant interactions from individual models above
 int_mod<-glm(in_hospital_death ~  Age:Gender + BUN_min:Age + GCS_max:RespRate_min + GCS_max:Gender + Platelets_diff:Gender + RespRate_min:Gender + SAPS1:ICUType + Age:ICUType + Bilirubin_diff:ICUType + BUN_min:ICUType + GCS_max:ICUType + MAP_max:ICUType + PaO2_max:ICUType + Platelets_diff:ICUType + RespRate_min:ICUType + Gender:ICUType, family = binomial(), data = ICUMort.f)
 summary(int_mod)
 #check statistically significant values
-# coef.df <- as.data.frame(summary(int_mod)$coefficients)
-# as.matrix(coef.df[coef.df$`Pr(>|z|)`<0.05,])
-#Age:Gender, BUN_min:Gender, pH_diff:Gender, BUN_min:ICUType, PaO2_max:ICUType, GCS_max:ICUType
+coef.df <- as.data.frame(summary(int_mod)$coefficients)
+as.matrix(coef.df[coef.df$`Pr(>|z|)`<0.05,])
+#Age:BUN_min, GCS_max:Gender, SAPS1:ICUType, Bilirubin_diff:ICUType, BUN_min:ICUType, GCS_max:ICUType, PaO2_max:ICUType
 #create statistically significant model
 sig_int_mod<-glm(in_hospital_death ~ BUN_min:Age + GCS_max:Gender + SAPS1:ICUType + Bilirubin_diff:ICUType + BUN_min:ICUType + GCS_max:ICUType + PaO2_max:ICUType, family = binomial(), data = ICUMort.f)
 summary(sig_int_mod)
@@ -521,21 +530,23 @@ anova(f.mod3, null_mod, test = "Chisq")
 anova(f.mod1, f.mod2, test = "Chisq")
 f.mod1$aic
 f.mod2$aic
+#model 2 is preferable to model 1 based on AIC
 anova(f.mod1, f.mod3, test = "Chisq")
 f.mod1$aic
 f.mod3$aic
+#model 3 preferable to model 1 based on AIC
 anova(f.mod2, f.mod3, test = "Chisq")
 f.mod2$aic
 f.mod3$aic
 #all tests statistically significant, can not reject null hypothesis, AIC improved on reduced models, 
 #unable to compare interaction models due to not enough degrees of freedom, 
-#p-value more significant for reduced full interaction model and AIC lower that both other models
+#p-value more significant for reduced full interaction model (fmod.3) and AIC lower that both other models
 
 ```
 
 ```{r, Task1, goodness of fit}
 
-#possible models - sig_full_mod, red_int_mod, red_full_int_mod
+#possible models - sig_full_mod (fmod.1), red_int_mod (fmod.2), red_full_int_mod (fmod.3)
 
 #Calculate the Hosmer-Lemeshow statistic
 #linear predictors
@@ -543,21 +554,18 @@ library(ResourceSelection)
 #Vector of predicted probabilities
 pred_mod1 <- predict(f.mod1, type = "response")
 (hl_mod1 <- hoslem.test(f.mod1$y, pred_mod1, g=80))
-#hl_mod1
 #No indication of a lack of fit as p > 0.05.
 
 pred_mod2 <- predict(f.mod2, type = "response")
 (hl_mod2 <- hoslem.test(f.mod2$y, pred_mod2, g=80))
-#hl_mod2
 #No indication of a lack of fit as p > 0.05.
 
 pred_mod3 <- predict(f.mod3, type = "response")
 (hl_mod3 <- hoslem.test(f.mod3$y, pred_mod3, g=80))
-#lack of fit as p < 0.05.
+#No indication of a lack of fit as p > 0.05.
 
 pred_null <- predict(null_mod, type = "response")
-# (hl_null <- hoslem.test(null_mod$y, pred_null, g=50))
-# hl_null
+#(hl_null <- hoslem.test(null_mod$y, pred_null, g=80))
 
 #difficulty assessing goodness of fit, check p-value over bins size 11:210 bins
 cn <- c("bins","f.mod1", "f.mod2", "f.mod3")
@@ -596,9 +604,8 @@ bs_mod3 <- mean((pred_mod3 - ICUMort.f$in_hospital_death)^2)
 bs_mod3
 bc_null <- mean((pred_null - ICUMort.f$in_hospital_death)^2)
 bc_null
-#Almost the same, more parsimonious model acceptible - red_int_mod??
+#Almost the same with the exception of the null.  Lower score is better, so models 2 and 3 are the best by this metric.
 
-#Brier score indicates that the reduced and full models are better than the null, but nor by a huge degree.
 #PseudoR2
 library(DescTools)
 #PsuedoR2 models under question
@@ -608,241 +615,65 @@ c <- t(PseudoR2(f.mod3, which = "all"))
 d <- t(PseudoR2(null_mod, which = "all"))
 
 #turn into table for easier interpretation
-psudortbl <- rbind(a,b,c,d)
-rownames(psudortbl) <- c("f.mod1", "f.mod2", "f.mod3", "null_mod")
+psudortbl_1 <- rbind(a,b,c,d)
+rownames(psudortbl_1) <- c("f.mod1", "f.mod2", "f.mod3", "null_mod")
 #round values for output
-round(psudortbl,4)
+round(psudortbl_1,4)
 ```
 
-```{r AUROC for all models}
+##
+Based on the Hoslem test, Brier score and pseudoR2 values, models 2 (reduced interaction only model) and 3 (reduced model with variables + interactions) perform the best, with lower Brier scores and higher pseudoR2 values.  Hosmer_Lemeshow indicates no evidence for lack of fit.  Given that an interaction model only is very hard to interpret, model 3 is likely the best model.
 
-
-SAPS.mod <- glm(in_hospital_death ~ SAPS1, data = ICUMort.t, family = binomial)
+```{r AUROC for models 2 and 3}
+library(pROC)
+#Create a SAPS 1 only model for comparison
+SAPS.mod <- glm(in_hospital_death ~ SAPS1, data = ICUMort.f, family = binomial)
 predSAPS <- predict(SAPS.mod, type="response")
-
+#Vector of outcomes
+oc <- ICUMort.f$in_hospital_death
 par(pty="s")
-plot.roc(ICUMort.t$in_hospital_death, ICUMort.t$predprob, identity.col="black", legacy.axes=TRUE,
-    auc.polygon = TRUE, auc.polygon.col=rgb(1,1,0.1, alpha = 0.3), col="yellow", legend= TRUE, legend.title="models")
-
-#ICUMort.f %>% mutate(predprob=predict(red_int_mod, type="response")) -> ICUMort.f
-plot.roc(ICUMort.f$in_hospital_death, pred_mod2, identity.col="black", legacy.axes=TRUE,
-    auc.polygon = TRUE, auc.polygon.col=rgb(.1,0.1,0.9, alpha = 0.3),add=TRUE, col="blue", legend= TRUE, legend.title="models")
-
-#ICUMort.f %>% mutate(predprob=predict(sig_full_mod, type="response")) -> ICUMort.f
-plot.roc(ICUMort.f$in_hospital_death, pred_mod3, identity.col="black", legacy.axes=TRUE,
-    auc.polygon = TRUE, auc.polygon.col=rgb(.1,0.9,0.1, alpha = 0.3),add=TRUE, col="green", legend= TRUE, legend.title="models")
-
-plot.roc(ICUMort.f$in_hospital_death, pred_mod1, identity.col="black", legacy.axes=TRUE, add=TRUE,
-    auc.polygon = TRUE, auc.polygon.col=rgb(.9,0.1,0.1, alpha = 0.3), col="red", legend= TRUE, legend.title="models")
-
-plot.roc(ICUMort.t$in_hospital_death, predSAPS, identity.col="black", legacy.axes=TRUE, add=TRUE,
-    auc.polygon = TRUE, auc.polygon.col=rgb(0.1,1,1, alpha = 0.3), col="black", legend= TRUE, legend.title="models")
+#Overlay ROC curves for models 1, 2 and 3 and compare to SAPS
+plot.roc(oc, pred_mod1, auc.polygon = TRUE, 
+         auc.polygon.col=rgb(.9,0.1,0.1, alpha = 0.3), col="red",
+         legacy.axes = TRUE)
+plot.roc(oc, pred_mod2, auc.polygon = TRUE, 
+         auc.polygon.col=rgb(.1,0.1,0.9, alpha = 0.3), col="blue", add=TRUE,
+         legacy.axes = TRUE)
+plot.roc(oc, pred_mod3, auc.polygon = TRUE, 
+         auc.polygon.col=rgb(.1,0.9,0.1, alpha = 0.3), add=TRUE,col="green",
+         legacy.axes = TRUE)
+plot.roc(oc, predSAPS, auc.polygon = TRUE, 
+         auc.polygon.col=rgb(0.1,1,1, alpha = 0.3), col="black",add=TRUE,
+         legacy.axes = TRUE)
 
 legend("bottomright",
-       legend=c("Multivariable Model", "Interaction Model", "Multivariable Interation Model", "Combined Unit Specific Model", "SAPS Only Model"),
+       legend=c("Multivariable Model", "Interaction Model", 
+                "Multivariable Interation Model", "SAPS Only Model"),
        title="Models:", 
-       fill=c(rgb(.9,0.1,0.1, alpha = 0.3),rgb(.1,0.1,0.9, alpha = 0.3),rgb(.1,0.9,0.1, alpha = 0.3),rgb(1,1,0.1, alpha = 0.3),rgb(0.1,1,1, alpha = 0.3)), 
-       border=c("red", "blue", "green", "yellow", "black"), 
-       inset=c(0.1,0.1))
+       fill=c(rgb(.9,0.1,0.1, alpha = 0.3),
+              rgb(.1,0.1,0.9, alpha = 0.3),
+              rgb(.1,0.9,0.1, alpha = 0.3),
+              #rgb(1,1,0.1, alpha = 0.3),
+              rgb(0.1,1,1, alpha = 0.3)), 
+       inset=c(0.1,0.1), cex = 0.5)
+
+#Confusion matrix to evaluate performance
+library(caret)
+#Create vectors of predicted outcomes, set 0.5 as threshold
+pred_oc_mod1 <- as.factor(ifelse(pred_mod1 < 0.5, "no", "yes"))
+pred_oc_mod2 <- as.factor(ifelse(pred_mod2 < 0.5, "no", "yes"))
+pred_oc_mod3 <- as.factor(ifelse(pred_mod3 < 0.5, "no", "yes"))
+#Actual outcome as a factor
+ocf <- as.factor(ifelse(ICUMort.f$in_hospital_death == 0, "no", "yes"))
+(mod1_cm<-confusionMatrix(pred_oc_mod1, ocf, positive = "yes"))
+(mod2_cm<-confusionMatrix(pred_oc_mod2, ocf, positive = "yes"))
+(mod3_cm<-confusionMatrix(pred_oc_mod3, ocf, positive = "yes"))
 ```
+#Best performing models
+The multivariable model with no interactions (model 1) performs the worst with the smallest AUC, and lowest sensitivity and positive predictive value.  Models 2 (interactions only) and 3 (multivariable plus interactions) perform similarly.  Interestingly the interaction only model performs slightly better.  Both models all models perform better than a models based on SAPS1 alone, a previously developed predictor of mortality in hospital.
 
+There appears to be a strong difference between the physiological variables and what type of ICU they are in. This seems logical. Attempt creating a different model for individual ICUs and combining at the end for prediction outcome.
 
-##Cath
-##Selecting predictor variables for in hostital death
-
-SAPS1 and SOFA seem like obvious choices, as these have been developed as predictors of clinical outcomes (SOFA) and risk of death (SAPS-I).  
-
-Age should also be included, as those who are very young or very old will likely have a higher risk of death.
-
-Include variables from SAPS-I as this has already been verified to correlate with increased risk of death (BUN, GCS, HCO3, HCT, HR, K, Na, RespRate, SysABP, Urine, WBC). Similarly for SOPS (PaO2, Platelets, Bilirubin, Creatinine, GCS).
-
-
-```{r, Task 1 univariate models}
-#Should start with univariate models for each of the variables we included.
-#Create vector of variables
-var_selection <- c("Glucose_diff", "WBC_min", "pH_diff", "Bilirubin_min", "BUN_min", "PaO2_max", "RespRate_min", "MAP_max", "Na_max", "GCS_max", "Age", "Gender", "ICUType","SAPS1")
-#Create a list of univariate models for each of the variables selected
-formulas<- paste('in_hospital_death ~', var_selection)
-unimod_list <- lapply(formulas, glm, family = binomial(), data = ICUMort)
-#Summary of all models
-unimod_summ <- lapply(unimod_list, summary)
-unimod_summ
-#All variables except Na_max and sex are significant in univariate models
-#Extract exp of coefficients - odds for each variable
-unimod_odds <- lapply(unimod_list, function(x) {exp(coef(x))})
-unimod_odds
-#pH diff has the largest effect, others increase odds by between ~2 -15 %, most around 2.  Albumin_max decreases odds by ~ 38%.
-
-#Check interactions from EDA
-var_int_selection <- c("Glucose_diff:Gender", "BUN_min:Gender", "RespRate_min:Gender", "Bilirubin_min:Gender", "pH_diff:Gender", "BUN_min:ICUType", "PaO2_max:ICUType", "Bilirubin_min:ICUType", "GCS_max:ICUType", "Age:ICUType")
-formulas_int<- paste('in_hospital_death ~', var_int_selection)
-unimod_int_list <- lapply(formulas_int, glm, family = binomial(), data = ICUMort)
-unimod_int_summ <- lapply(unimod_int_list, summary)
-unimod_int_summ
-#all interactions statistically significant.
-```
-
-```{r, multivariate models}
-#Only include statisically significant variables from above. cut off 0.05.
-full_mod<-glm(in_hospital_death ~ SAPS1 + Age + Bilirubin_diff + BUN_min + GCS_max + ICUType + PaO2_max + 
-                Platelets_diff + RespRate_min, family = binomial(), data = ICUMort.f)
-summary(full_mod)
-#check statistically significant values
-#create statistically significant model
-sig_full_mod<-glm(in_hospital_death ~ SAPS1 + Age + Bilirubin_diff + BUN_min + GCS_max + ICUType + PaO2_max 
-                , family = binomial(), data = ICUMort.f)
-summary(sig_full_mod)
-
-#compare full with statistically significant for anova and AIC
-anova(full_mod, sig_full_mod, test = "Chisq")
-full_mod$aic
-sig_full_mod$aic
-#test not significant, AIC lower for sig model, we can accept the simpler model
-
-#check full models against stepwise removal of variables
-red_full_mod <- step(full_mod, trace = 0)
-anova(red_full_mod, sig_full_mod, test = "Chisq")
-red_full_mod$aic
-sig_full_mod$aic
-#test not significant, AIC similar, we can accept the simpler model - sig_full_mod
-f.mod1 <- sig_full_mod
-
-#Statistically significant interactions from individual models above
-int_mod<-glm(in_hospital_death ~  Age:Gender + BUN_min:Age + GCS_max:RespRate_min + GCS_max:Gender + Platelets_diff:Gender + RespRate_min:Gender + SAPS1:ICUType + Age:ICUType + Bilirubin_diff:ICUType + BUN_min:ICUType + GCS_max:ICUType + MAP_max:ICUType + PaO2_max:ICUType + Platelets_diff:ICUType + RespRate_min:ICUType + Gender:ICUType, family = binomial(), data = ICUMort.f)
-summary(int_mod)
-#check statistically significant values
-# coef.df <- as.data.frame(summary(int_mod)$coefficients)
-# as.matrix(coef.df[coef.df$`Pr(>|z|)`<0.05,])
-#Age:Gender, BUN_min:Gender, pH_diff:Gender, BUN_min:ICUType, PaO2_max:ICUType, GCS_max:ICUType
-#create statistically significant model
-sig_int_mod<-glm(in_hospital_death ~ BUN_min:Age + GCS_max:Gender + SAPS1:ICUType + Bilirubin_diff:ICUType + BUN_min:ICUType + GCS_max:ICUType + PaO2_max:ICUType, family = binomial(), data = ICUMort.f)
-summary(sig_int_mod)
-
-#compare full with statistically significant for anova and AIC
-anova(int_mod, sig_int_mod, test = "Chisq")
-int_mod$aic
-sig_int_mod$aic
-#test statistically significant, AIC lower for int model, reject null hypothesis and keep original model
-
-#check full models against stepwise removal of variables
-red_int_mod <- step(int_mod, trace = 0)
-anova(red_int_mod, int_mod, test = "Chisq")
-red_int_mod$aic
-int_mod$aic
-#test not significant, AIC better for reduced model, we can accept the simpler model - red_int_mod
-f.mod2 <- red_int_mod
-
-#Full model with interactions
-full_int_mod <-glm(in_hospital_death ~ SAPS1 + Age + Bilirubin_diff + BUN_min + GCS_max + ICUType + PaO2_max + 
-                Platelets_diff + RespRate_min + Age:Gender + BUN_min:Age + GCS_max:RespRate_min + GCS_max:Gender +
-                Platelets_diff:Gender + RespRate_min:Gender + SAPS1:ICUType + Age:ICUType + Bilirubin_diff:ICUType +
-                BUN_min:ICUType + GCS_max:ICUType + MAP_max:ICUType + PaO2_max:ICUType + Platelets_diff:ICUType +
-                RespRate_min:ICUType + Gender:ICUType, family = binomial(), data = ICUMort.f)
-summary(full_int_mod)
-#check statistically significant values
-# coef.df <- as.data.frame(summary(full_int_mod)$coefficients)
-# as.matrix(coef.df[coef.df$`Pr(>|z|)`<0.05,])
-#pH_diff, BUN_min, Na_max, GCS_max, Age, ICUType, Gender, Age:Gender, PaO2_max:ICUType, GCS_max:ICUType
-
-#create statistically significant model at 0.1
-sig_full_int_mod<-glm(in_hospital_death ~ SAPS1 + GCS_max + ICUType + PaO2_max + Age:Gender + GCS_max:Gender +
-                        SAPS1:ICUType + GCS_max:ICUType,
-                      family = binomial(), data = ICUMort.f)
-summary(sig_full_int_mod)
-
-#compare full with statistically significant for anova and AIC
-anova(full_int_mod, sig_full_int_mod, test = "Chisq")
-full_int_mod$aic
-sig_full_int_mod$aic
-#test statistically significant, AIC lower for full int model, reject null hypothesis and keep original model
-
-#check full models against stepwise removal of variables
-red_full_int_mod <- step(full_int_mod, trace = 0)
-anova(red_full_int_mod, full_int_mod, test = "Chisq")
-red_full_int_mod$aic
-full_int_mod$aic
-#test not significant, AIC better for reduced model, we can accept the simpler model - red_full_int_mod
-f.mod3 <- red_full_int_mod
-
-#Compare chosen models to a null model
-null_mod <- glm(in_hospital_death ~ 1, family = binomial, data = ICUMort.f)
-#anova(sig_full_mod, null_mod, test = "Chisq")
-anova(f.mod1, null_mod, test = "Chisq")
-anova(f.mod2, null_mod, test = "Chisq")
-anova(f.mod3, null_mod, test = "Chisq")
-#All tests statistically significant - Reject null hypothesis of no relationship between predictors and outcome for all models
-
-#compare chosen models
-anova(f.mod1, f.mod2, test = "Chisq")
-f.mod1$aic
-f.mod2$aic
-anova(f.mod1, f.mod3, test = "Chisq")
-f.mod1$aic
-f.mod3$aic
-anova(f.mod2, f.mod3, test = "Chisq")
-f.mod2$aic
-f.mod3$aic
-#all tests statistically significant, can not reject null hypothesis, AIC improved on reduced models, 
-#unable to compare interaction models due to not enough degrees of freedom, 
-#p-value more significant for reduced full interaction model and AIC lower that both other models
-
-
-```
-_will include some commentary on these results_
-
-Next step is to examine the goodness of fit, and model assumptions.
-
-```{r, Task1, goodness of fit}
-
-#possible models - sig_full_mod, red_int_mod, red_full_int_mod
-
-#Calculate the Hosmer-Lemeshow statistic
-#linear predictors
-library(ResourceSelection)
-#Vector of predicted probabilities
-pred_mod1 <- predict(sig_full_mod, type = "response")
-hl_mod1 <- hoslem.test(sig_full_mod$y, pred_mod1, g=80)
-hl_mod1
-#No indication of a lack of fit as p > 0.05.
-
-pred_mod2 <- predict(red_int_mod, type = "response")
-hl_mod2 <- hoslem.test(red_int_mod$y, pred_mod2, g=80)
-hl_mod2
-#No indication of a lack of fit as p > 0.05.
-
-pred_mod3 <- predict(red_full_int_mod, type = "response")
-hl_mod3 <- hoslem.test(red_full_int_mod$y, pred_mod3, g=80)
-hl_mod3
-#No indication of a lack of fit as p > 0.05.
-
-pred_null <- predict(null_mod, type = "response")
-
-
-#Compare brier scores
-(bs_mod1 <- mean((pred_mod1 - ICUMort.f$in_hospital_death)^2))
-(bs_mod2 <- mean((pred_mod2 - ICUMort.f$in_hospital_death)^2))
-(bs_mod3 <- mean((pred_mod3 - ICUMort.f$in_hospital_death)^2))
-(bc_null <- mean((pred_null - ICUMort.f$in_hospital_death)^2))
-#Almost the same, more parsimonious model acceptible - red_int_mod??
-
-#Brier score indicates that the reduced and full models are better than the null, but nor by a huge degree.
-#PseudoR2
-library(DescTools)
-#PsuedoR2 models under question
-a <- t(PseudoR2(sig_full_mod, which = "all"))
-b <- t(PseudoR2(red_int_mod, which = "all"))
-c <- t(PseudoR2(red_full_int_mod, which = "all"))
-d <- t(PseudoR2(null_mod, which = "all"))
-
-#turn into table for easier interpretation
-psudortbl <- rbind(a,b,c,d)
-rownames(psudortbl) <- c("sig_full_mod", "red_int_mod", "red_full_int_mod", "null_mod")
-#round values for output
-round(psudortbl,4)
-
-```
-
-#Appears to be a strong difference between the physiological variables and what type of ICU they are in. This seems logical. Attempt creating a different model for individual ICUs and combining at the end for prediction outcome
 ```{r multimodel method for each ICU type}
 #review analysis of ICUType specific models, create data frames
 ICUMort.CCU <- ICUMort.t[ICUMort.t$ICUType=="Coronary Care Unit",]
@@ -978,7 +809,7 @@ CSRU.red.mod$aic
 mean((predict(CSRU.sig.mod, type = "response") - ICUMort.CSRU$in_hospital_death)^2)
 mean((predict(CSRU.red.mod, type = "response") - ICUMort.CSRU$in_hospital_death)^2)
 #Keep red model.
-CSRU.mod <- CSRU.sig.mod
+CSRU.mod <- CSRU.red.mod
 
 
 #check goodness of fit
@@ -998,16 +829,13 @@ pred.SICU <- predict(SICU.mod, type = "response")
 (hl.SICU <- hoslem.test(SICU.mod$y, pred.SICU, g=30))
 #No indication of a lack of fit as p > 0.05.
 
-pred.CSRU.sig <- predict(CSRU.sig.mod, type = "response")
-(hl.CSRU <- hoslem.test(CSRU.sig.mod$y, pred.CSRU.sig, g=40))
+pred.CSRU <- predict(CSRU.sig.mod, type = "response")
+(hl.CSRU <- hoslem.test(CSRU.sig.mod$y, pred.CSRU, g=40))
 #h-l statistically significant, suggests lack of fit. Try reduced model instead.
 pred.CSRU.red <- predict(CSRU.red.mod, type = "response")
 (hl.CSRU <- hoslem.test(CSRU.red.mod$y, pred.CSRU.red, g=40))
-#h-l statistically significant, suggests lack of fit. Try full model instead.
-pred.CSRU <- predict(CSRU.full.mod, type = "response")
-(hl.CSRU <- hoslem.test(CSRU.full.mod$y, pred.CSRU, g=40))
-#better fit
-CSRU.mod <- CSRU.full.mod
+#No indication of a lack of fit as p > 0.05.
+
 
 null.CCU.mod <- glm(in_hospital_death ~ 1, data = ICUMort.CCU, family = binomial)
 null.MICU.mod <- glm(in_hospital_death ~ 1, data = ICUMort.MICU, family = binomial)
@@ -1029,7 +857,7 @@ mean((null.MICU - ICUMort.MICU$in_hospital_death)^2)
 (bs.SICU <- mean((pred.SICU - ICUMort.SICU$in_hospital_death)^2))
 mean((null.SICU - ICUMort.SICU$in_hospital_death)^2)
 
-(bs.CSRU <- mean((pred.CSRU - ICUMort.CSRU$in_hospital_death)^2))
+(bs.CSRU <- mean((pred.CSRU.red - ICUMort.CSRU$in_hospital_death)^2))
 mean((null.CSRU - ICUMort.CSRU$in_hospital_death)^2)
 
 #brier scores better than null models
@@ -1045,12 +873,13 @@ d <- t(PseudoR2(CSRU.mod, which = "all"))
 e <- t(PseudoR2(null_mod, which = "all"))
 
 #turn into table for easier interpretation
-psudortbl <- rbind(a,b,c,d,e)
-rownames(psudortbl) <- c("CCU.mod", "MICU.mod", "SICU.mod", "CSRU.mod","null_mod")
+psudortbl_2 <- rbind(a,b,c,d,e)
+rownames(psudortbl_2) <- c("CCU.mod", "MICU.mod", "SICU.mod", "CSRU.mod","null_mod")
 #round values for output
-round(psudortbl,4)
-
-
+round(psudortbl_2,4)
+#compare to models for all ICU units
+round(psudortbl_1,4)
+#Seperate models per ICU give better psuedo R2 values.
 ```
 
 
@@ -1070,94 +899,44 @@ mean((pred_null - ICUMort.t$in_hospital_death)^2)
 
 #plot ROC for multi unit model
 par(pty="s")
-plot.roc(ICUMort.t$in_hospital_death, ICUMort.t$predprob, identity.col="black", legacy.axes=TRUE,
-    auc.polygon = TRUE, auc.polygon.col=rgb(.9,0.1,0.1, alpha = 0.3), col="red", legend= TRUE, legend.title="models")
-```
+plot.roc(oc, ICUMort.t$predprob,auc.polygon = TRUE,
+         auc.polygon.col=rgb(1,1,0.1, alpha = 0.3), col = "yellow",
+         legacy.axes = TRUE, print.auc = TRUE, 
+         print.auc.y = 0.2, print.auc.col = "orange")
 
-```{r AUROC for all models}
-
-
-
-```
-
-##Goodness of fit
-Both the full and reduced model explain more variation than the null model, but it is a relatively small amount of the variance (McFadden ~0.17).  No evidence of a lack of fit from the Hosmer-Lemeshow statistic, and Brier scores are lower (i.e. better) for both full ad reduced model compared to the null.  Not a huge difference between the full and reduced models.
-
-```{r}
-#Calculate confusion matrix
-library(caret)
-#Create vector of predicted outcomes, set 0.5 as threshold
-pred_oc <- as.factor(ifelse(pred < 0.5, "no", "yes"))
-#Convert outcome to no yes factor
-oc <- as.factor(ifelse(ICUMort$in_hospital_death == 0, "no", "yes"))
-confusionMatrix(pred_oc, oc, positive = "yes")
-#Not a great at predicting death, only ~16% sensitivity.  Look at distribution of predicted probs for each case.
-mod_pred <- data.frame(pred,oc)
-ggplot(mod_pred, aes(x = oc, y = pred)) + geom_boxplot() +
-  labs(title = "Predicted probabilities from reduced model by outcome", 
-       x = "Death", y = "Probability")
-#Based on the graphs, change the threshold for considering the outcome to occur to 0.2
-#Create vector of predicted outcomes, set 0.5 as threshold
-pred_oc2 <- as.factor(ifelse(pred < 0.2, "no", "yes"))
-#Convert outcome to no yes factor
-confusionMatrix(pred_oc2, oc, positive = "yes")
-#Still not great at predicting the outcome, sensitivity improved, but specificity is reduced - pos predictive value only 35%. Should look to see how this compares to 
-#First try ROC
-library(Epi)
-#Plot reduced model ROC
-ROC(pred, oc, plot = "ROC", main = "Reduced interaction model ROC")
-#Plot full model ROC
-pred_full <- predict(full_mod, type = "response")
-ROC(pred_full, oc, plot = "ROC", main = "Full model ROC")
-
-```
-
-##Predictive value
-Moderate performance of the model, with ROC AUC of 0.786.  By comparison, the mean SOFA score showed AUC of ~0.88 in the publication linked above.  
-
-Maybe if more variables are included from the initial set, a better prediction could be achieved?
-
-What about SOFA alone?
-```{r - check AUC of univariate SOFA model}
-ROC(predict(unimod_list[[1]], type = "response"), oc, plot = "ROC")
-#AUC only 0.651 in this dataset for a univariate SOFA model.
-
-#all AUROCs for current models (including one for SAPS only)
-SAPS.mod <- glm(in_hospital_death ~ SAPS1, data = ICUMort.t, family = binomial)
-predSAPS <- predict(SAPS.mod, type="response")
-
-par(pty="s")
-plot.roc(ICUMort.t$in_hospital_death, ICUMort.t$predprob, identity.col="black", legacy.axes=TRUE,
-    auc.polygon = TRUE, auc.polygon.col=rgb(1,1,0.1, alpha = 0.3), col="yellow", legend= TRUE, legend.title="models")
-
-#ICUMort.f %>% mutate(predprob=predict(red_int_mod, type="response")) -> ICUMort.f
-plot.roc(ICUMort.f$in_hospital_death, pred_mod2, identity.col="black", legacy.axes=TRUE,
-    auc.polygon = TRUE, auc.polygon.col=rgb(.1,0.1,0.9, alpha = 0.3),add=TRUE, col="blue", legend= TRUE, legend.title="models")
-
-#ICUMort.f %>% mutate(predprob=predict(sig_full_mod, type="response")) -> ICUMort.f
-plot.roc(ICUMort.f$in_hospital_death, pred_mod3, identity.col="black", legacy.axes=TRUE,
-    auc.polygon = TRUE, auc.polygon.col=rgb(.1,0.9,0.1, alpha = 0.3),add=TRUE, col="green", legend= TRUE, legend.title="models")
-
-plot.roc(ICUMort.f$in_hospital_death, pred_mod1, identity.col="black", legacy.axes=TRUE, add=TRUE,
-    auc.polygon = TRUE, auc.polygon.col=rgb(.9,0.1,0.1, alpha = 0.3), col="red", legend= TRUE, legend.title="models")
-
-plot.roc(ICUMort.t$in_hospital_death, predSAPS, identity.col="black", legacy.axes=TRUE, add=TRUE,
-    auc.polygon = TRUE, auc.polygon.col=rgb(0.1,1,1, alpha = 0.3), col="black", legend= TRUE, legend.title="models")
-
-legend("bottomright",
-       legend=c("Multivariable Model", "Interaction Model", "Multivariable Interation Model", "Combined Unit Specific Model", "SAPS Only Model"),
+#Compare to best model for all ICU units
+plot.roc(oc, pred_mod3, auc.polygon = TRUE, 
+         auc.polygon.col=rgb(.1,0.9,0.1, alpha = 0.3),add=TRUE, col="green",
+         legacy.axes = TRUE, print.auc = TRUE, print.auc.x = 0.4, 
+         print.auc.y = 0.3)
+#Add best model without any interactions
+plot.roc(oc, pred_mod2, auc.polygon = TRUE, 
+         auc.polygon.col=rgb(.1,0.1,0.9, alpha = 0.3), add=TRUE, col="blue", 
+         legacy.axes=TRUE, print.auc = TRUE, print.auc.x = 0.3, 
+         print.auc.y = 0.4)
+legend("bottomleft",
+       legend=c("Split ICU model", "Multivariable Interation Model", 
+                "Interaction Model"),
        title="Models:", 
-       fill=c(rgb(.9,0.1,0.1, alpha = 0.3),rgb(.1,0.1,0.9, alpha = 0.3),rgb(.1,0.9,0.1, alpha = 0.3),rgb(1,1,0.1, alpha = 0.3),rgb(0.1,1,1, alpha = 0.3)), 
-       border=c("red", "blue", "green", "yellow", "black"), 
-       inset=c(0.1,0.1))
+       fill=c(rgb(1,1,0.1, alpha = 0.3),
+              rgb(.1,0.9,0.1, alpha = 0.3),
+              rgb(.1,0.1,0.9, alpha = 0.3)), 
+       inset=c(0.1,0.1), cex = 0.4)
 ```
 
-I wonder if we should try to include SAPS1 with missing rows removed from the entire dataset - would mean loosing 96 of 2061.  Could also try adding other variables ruled out above to the model to see if we get a better fit.
+```{r confusion matrix for best performing models}
+#Calculate confusion matrix
+#Use outcomes from seperate models for ICUtypes
+pred_oc_ICUmods <-as.factor(ifelse(ICUMort.t$predprob < 0.5, "no", "yes"))
+(ICUmods_cm <-confusionMatrix(pred_oc_ICUmods, ocf, positive = "yes"))
 
+#The models seperated by ICU perform better than the single model, but it is a marginal increase.  In practice this maybe hard to implement, as different models would be required for different units.  
 
+```
 
+In general, for all the models tested the sensitivity was relatively low, and the positive predictive value somewhere between 50-60%.  This means that only ~20% of people that die would be identified as at high risk, and of the people identified as at high risk, about half of them are incorrectly classified.  Despite this, a single model (i.e. model 3) would still be useful if the aim was to predict which patients may be at higher risk of death and allocate resources accordingly.  
 
-
+However if the aim is to identify risk factors for death in hospital, the models split by ICU type would be more appropraiate, as patients in different ICU units may have different risk factors for death.
 
 # Task 2 (15 marks)
 
