@@ -1,6 +1,6 @@
 ---
 title: "HDAT9600 Final Assignment"
-author: "Burnsite"
+author: "Team Burnside"
 date: "22 August 2019"
 output:
   html_document: default
