@@ -1173,6 +1173,9 @@ icu_patients_df1 <- readRDS("icu_patients_df1.rds")
 head(icu_patients_df1)
 str(icu_patients_df1)
 class(icu_patients_df1)
+library(tidyverse)
+dd <- icu_patients_df1 %>%
+  filter(SOFA!=-1)
 
 ```
 
