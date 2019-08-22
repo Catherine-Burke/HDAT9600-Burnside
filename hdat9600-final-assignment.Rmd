@@ -1,11 +1,10 @@
 ---
 title: "HDAT9600 Final Assignment"
 author: "Team Burnside"
-date: "22 August 2019"
+date: "Friday 23 August 2019"
 output:
   html_document: default
   pdf_document: default
-subtitle: 'Submission deadline is 5pm Friday 23 2019 '
 ---
 
 ```{r setup, include=FALSE}
@@ -13,6 +12,13 @@ subtitle: 'Submission deadline is 5pm Friday 23 2019 '
 # see the knitr documentation for details
 options(width=120)
 knitr::opts_chunk$set(echo = TRUE, fig.width=12, fig.height=12)
+
+#make sure appropriate libraries are installed
+libs <- c("e1071", "learnr", "ggplot2", "tidyverse")
+missing <- !libs %in% installed.packages()
+if (any(missing)) {
+  install.packages(libs[missing],repos="https://cloud.r-project.org", dependencies = TRUE)
+}
 ```
 
 ## Instructions
@@ -181,7 +187,7 @@ In this task, you are required to develop a logistic regression model using the 
 library(tidyverse)
 library(ggplot2)
 ```
-##Jason
+
 ##Consideration for variables
 We only need to include 5-10ish variables. This is requires a logical approach to culling. The first step is to remove any variables that do not have a full set of data (eg 2061 records). The rationale for this is that if you include incomplete variables then drop an incomplete variable you may not be able to adequately compare the current model to the previous one.  
   
