@@ -14,7 +14,7 @@ options(width=120)
 knitr::opts_chunk$set(echo = TRUE, fig.width=12, fig.height=12)
 
 #make sure appropriate libraries are installed
-libs <- c("e1071", "learnr", "ggplot2", "tidyverse")
+libs <- c("tidyverse", "ggplot2", "corrplot", "ResourceSelection", "DescTools", "pROC", "caret", "survival", "survminer", "rankhazard", "eha", "gridExtra")
 missing <- !libs %in% installed.packages()
 if (any(missing)) {
   install.packages(libs[missing],repos="https://cloud.r-project.org", dependencies = TRUE)
@@ -235,67 +235,105 @@ table(icu_patients_df1$SAPS1)
 #65 scores of -1 for SOFA - investigate (check for consistency with scoring against GCS, MAP, Creatinine/Urine, PaO2/FiO2, Bilirubin and Platelets)
 icu_patients_df1[icu_patients_df1$SOFA==0 & icu_patients_df1$MAP_min<70,c("SOFA", "PaO2_min", "FiO2_max", "Bilirubin_max", "GCS_min", "Creatinine_max", "Urine_max", "Platelets_min", "MAP_min")]
 #noted variation in score relative to variables. Eg, 20/52 SOFA scores of 0 appear wrong based on MAP. Difficult and time consuming to determine accuracy of other scores - assume inaccurate, leave out. Use SAPS1 instead
+#remove SOFA score
 
 #remove incomplete variables to maintain data integrity but keeps SAPS1 as a predictor and not too many values missing (96/2061)
 ICUMort <- icu_patients_df1[,complete.cases(t(icu_patients_df1))]
 ICUMort <- cbind(ICUMort, SAPS1=icu_patients_df1$SAPS1)
-summary(ICUMort)
-str(ICUMort)
+ICUMort <- within(ICUMort, rm(SOFA, RecordID, Length_of_stay, Days, Status))
 
 #SAPS1 includes Age, HR, SBP, Temp, RR, urine, BUN, HCT, WBC, glucose, potassium, sodium, HCO3, GCS using most deranged value in first 24 hours.
 
+summ.all.mod <- summary(glm(in_hospital_death ~ ., data = ICUMort, family = binomial))
+summ.all.mod$coefficients[summ.all.mod$coefficients[,4]<0.1,]
+#Age, GCS_max,SAPS1,MAP_max,HR_min,MAP_diff,Platelets_diff,ALP_max,PaO2_max,Urine_max,BUN_min,WBC_max,ALP_diff,Albumin_diff,HCT_max,ALT_diff,ICUType,Urine_diff,Lactate_diff all statistically significant at <0.1
+#ICUType appears to play a role, logically the patients between units will be very different, investigate if different variables affect different groups more
+
+#create vector of statistically significant variables - removed matching variable with lower significance
+stat.list <- c("Age", "GCS_max","SAPS1","MAP_max","HR_min","Platelets_diff","ALP_max","PaO2_max","Urine_max","BUN_min","WBC_max","Albumin_diff","HCT_max","ALT_diff","ICUType","Lactate_diff")
+
+#create model variable list without ICUType
+unit.mod.list <- paste0(c("in_hospital_death ~", stat.list[stat.list != "ICUType"]), collapse = " + ")
+
+#review analysis of ICUType specific models, create data frames
+ICUMort.CCU <- ICUMort.t[ICUMort$ICUType=="Coronary Care Unit",]
+ICUMort.CCU <- within(ICUMort.CCU, rm(ICUType))
+ICUMort.MICU <- ICUMort.t[ICUMort$ICUType=="Medical ICU",]
+ICUMort.MICU <- within(ICUMort.MICU, rm(ICUType))
+ICUMort.SICU <- ICUMort.t[ICUMort$ICUType=="Surgical ICU",]
+ICUMort.SICU <- within(ICUMort.SICU, rm(ICUType))
+ICUMort.CSRU <- ICUMort.t[ICUMort$ICUType=="Cardiac Surgery Recovery Unit",]
+ICUMort.CSRU <- within(ICUMort.CSRU, rm(ICUType))
+
+print("CCU")
+summ.all.mod <- summary(glm(unit.mod.list, data = ICUMort.CCU, family = binomial))
+summ.all.mod$coefficients[summ.all.mod$coefficients[,4]<0.1,]
+print("MICU")
+summ.all.mod <- summary(glm(unit.mod.list, data = ICUMort.MICU, family = binomial))
+summ.all.mod$coefficients[summ.all.mod$coefficients[,4]<0.1,]
+print("SICU")
+summ.all.mod <- summary(glm(unit.mod.list, data = ICUMort.SICU, family = binomial))
+summ.all.mod$coefficients[summ.all.mod$coefficients[,4]<0.1,]
+print("CSRU")
+summ.all.mod <- summary(glm(unit.mod.list, data = ICUMort.CSRU, family = binomial))
+summ.all.mod$coefficients[summ.all.mod$coefficients[,4]<0.1,]
+
+
+
+
 ```
   
-#Variables left after incomplete and other outcome related variables removed.
+#Statistically significant Variables left after incomplete and other outcome related variables removed. Ordered by p-value.
+_"Age", "GCS_max","SAPS1","MAP_max","HR_min","MAP_diff","Platelets_diff","ALP_max","PaO2_max","Urine_max","BUN_min","WBC_max","ALP_diff","Albumin_diff","HCT_max","ALT_diff","ICUType","Urine_diff","Lactate_diff")_
 
 ##Assessable outcome: "in_hospital_death"  
   
-_Demographics: "Age", "Gender", "ICUType"_
-_Age and sex are demographics important for identifying confounders. Height is missing a lot of values. Is length of stay a predictor or an outcome? Suggest outcome, remove.  Weight missing a lot of values. ICUType identifies different patient cohorts._
+_Demographics: "Age", "ICUType", "Gender"_
+_Age and sex are demographics important for identifying confounders. ICUType identifies different patient cohorts Keep all._
 ##Selected Variables: "Age", "Gender", "ICUType" 
 Total number of variables = 3
 
-_Scores: "SOFA", "SAPS1"_
-_SOFA score uses GCS, MAP, Creatinine/Urine, PaO2/FiO2, Bilirubin and Platelets. Upon closer inspect of SOFA score, it appears the calculations may be wildly inaccurate. Don't include. SAPS1 includes Age, HR, SBP, Temp, RR, urine, BUN, HCT, WBC, glucose, potassium, sodium, HCO3, GCS using most deranged value in first 24 hours._
+_Scores: "SAPS1"_
+_SAPS1 includes Age, HR, SBP, Temp, RR, urine, BUN, HCT, WBC, glucose, potassium, sodium, HCO3, GCS using most deranged value in first 24 hours._
 ##Selected Variables: "SAPS1"
 Total number of variables = 4
 
-_CNS: "GCS", "Na"_
+_CNS: "GCS_max"_
 _Sodium and GCS included in SAPS1. Review both in context of other variables._
-##Selected Variables: "Na", "GCS"
-Total number of variables = 6
+##Selected Variables: "GCS_max"
+Total number of variables = 5
 
-_Cardiovascular: HR", "K", "MAP", "Mg", "TroponinI", "TroponinT"_
-_TroponinI is the value that is routinely checked for patient's who present with chest pain/MI. The dataset has a coronary care unit and a cadiac surgical ICU, include TnI(not TnT). Temp is bad if high or low, can be a marker for infection. Likely WBC will be better. HR bad if too high or too low, marker for SIRS. Unsure about usefulness of including electrolytes (K, Mg) as they are quite modifiable, leave out._
-##Selected Variables: "MAP", "TroponinI"
+_Cardiovascular: "MAP_max","HR_min","MAP_diff"_
+_Logically it makes sense to keep MAP_max over MAP_diff. Lower BP associated with poorer outcomes. HR_min also very statistically significant. Keep both._
+##Selected Variables: "MAP_max", "HR_min"
+Total number of variables = 7
+
+_Respiratory: "PaO2_max"_
+_PaO2_max only variable for respiratory disfunction, keep._
+##Selected Variables: "PaO2_max"
 Total number of variables = 8
 
-_Respiratory: "FiO2", "PaCO2", "PaO2", "RespRate", "SaO2"_
-_PaCO2 can be bad low and high but is also easily modified, leave out. Respiratory rate bad if low or high but likely to be worse in ICU if high. SOFA score no good, use PaO2. Lower is worse._
-##Selected Variables: "RespRate", "PaO2"
+_Renal: "Urine_max","BUN_min","Urine_diff"_
+_All values are good markers of acute kidney injury or chronic kidney disease which both have a higher than average mortality rate. Preference Urine_max over Urine_diff._
+##Selected Variables: "Urine_max","BUN_min"
 Total number of variables = 10
 
-_Renal: "BUN", "Creatinine", "Urine"_
-_All values are good markers of acute kidney injury or chronic kidney disease which both have a higher than average mortality rate._
-##Selected Variables: "BUN"
+_Liver: "ALP_max","ALP_diff","Albumin_diff","ALT_diff"_
+_ALP_max only value significant <0.05._
+##Selected Variables: "ALP_max"
 Total number of variables = 11
 
-_Liver: "Albumin", "ALP", "ALT", "AST", "Bilirubin", "Cholesterol"_
-_Low albumin is bad. High bilirubin is bad. ALT and ALT are supportive markers for liver failure but this is adequately covered by bilirubin. Unclear about the role of Cholesterol in critical illness, leave out._
-##Selected Variables: "Bilirubin"
-Total number of variables = 12
-
-_Metabolic/Other: "Glucose", "HCO3", "HCT", "Lactate", "pH", "Platelets", "Temp", "WBC"_
-_Glucose bad if low or high, diabetes also a high mortaility comorbidity in ICU. HCO3 bad if it’s low. High lactate is bad. WBC marker for infection in both directions. Low platelets are bad. pH is a good marker of severity of illness, bad in both directions, also related to HCO3 and PaCO2. HCT can be related to life threatening disorders._
-##Selected Variables: "Glucose", "WBC", "pH", "Platelets"
-Total number of variables = 16
+_Metabolic/Other: "Platelets_diff","WBC_max","HCT_max","Lactate_diff"_
+_Platelets_diff and HCT_max not significant in any ICU type models, Platelets very significant in full model though. Keep WBS_max, Platelets_diff and Lactate_diff._
+##Selected Variables: "WBC_max","Lactate_diff", "Platelets_diff"
+Total number of variables = 14
 
 #16 Variables selected with intention to drop ~5+.
 
 ```{r review of selected variables}
 #create dataframe with selected variables
 #create list of selected variables
-var.list <- c("Age", "Gender", "ICUType", "SAPS1", "Na", "GCS", "MAP", "TroponinI", "RespRate", "PaO2", "BUN", "Bilirubin", "Glucose", "WBC", "pH", "Platelets", "in_hospital_death")
+var.list <- c("Age", "GCS_max","SAPS1","MAP_max","HR_min","Platelets_diff","ALP_max","PaO2_max","Urine_max","BUN_min","WBC_max","ICUType","Lactate_diff", "Gender", "in_hospital_death")
 
 #create empty list for variables to go into
 test.list <- NULL
@@ -321,15 +359,15 @@ ICUMort.t <- ICUMort.t[complete.cases(ICUMort.t),]
 testing_mod <- glm(in_hospital_death ~ ., data=ICUMort.t, family="binomial")
 (sumtest <- summary(testing_mod))
 
-#print statisically significant values (at  0.1) to assess
+#print statisically significant values (at 0.1) to assess
 coef.df <- as.data.frame(sumtest$coefficients)
 round(as.matrix(coef.df[coef.df$`Pr(>|z|)`<0.1,]),4)
 
 #statisically significant values -> Age, Bilirubin_diff, BUN_min, GCS_max, ICUType, MAP_max, Na_max, PaO2_max, Platelets_diff, RespRate_min, SAPS1
 #Gender not statistically significant alone but likely to have interactions.
 
-#final data frame for analysis
-ICUMort.f <- icu_patients_df1[,c("SAPS1", "Age", "Bilirubin_diff", "BUN_min", "GCS_max", "ICUType", "MAP_max", "PaO2_max", "Platelets_diff", "RespRate_min", "WBC_max", "Gender", "in_hospital_death")]
+#final data frame for analysis - leaving gender in
+ICUMort.f <- icu_patients_df1[,c("Age", "GCS_max", "SAPS1", "HR_min", "ALP_max", "PaO2_max", "Urine_max", "BUN_min", "WBC_max", "ICUType", "Lactate_diff", "Gender", "in_hospital_death")]
 ICUMort.f <- ICUMort.f[complete.cases(ICUMort.f),]
 
 ```
@@ -348,22 +386,42 @@ for (i in names(ICUMort.f)[1:12]){
   
     plot_list[[i]] <- ggplot(ICUMort.f, aes_string(i)) +
           geom_histogram(aes(y = ..density.., fill = factor(in_hospital_death, labels = c("No","Yes"))), alpha = .3, bins = 60, position = "identity") +
-          labs(x=i, fill="Died", title = paste0("Density Plot of ", i,", ", length(na.omit(ICUMort.f[[i]]))," values available")) + 
-      theme(text = element_text(size=6))
+          labs(x=i, fill="Died", title = paste0("Density Plot of ", i)) + 
+      theme(text = element_text(size=6)) + 
+      theme(legend.position = "none")
 
     }else{
 
     plot_list[[i]] <- ggplot(ICUMort.f, aes_string(i)) +
           geom_bar(position = "fill", aes(fill=factor(in_hospital_death, labels = c("No", "Yes")))) +
-          labs(x = i, fill = "Died", title = paste0("Bar Plot of ", i,", ",  length(na.omit(ICUMort.f[[i]])), " values available")) +
-      theme(text = element_text(size=6))
+          labs(x = i, fill = "Died", title = paste0("Bar Plot of ", i)) +
+      theme(text = element_text(size=6)) +
+    theme(legend.position = "none")
  
   }
 }
 library(gridExtra)
+
+#create ggplot for legend formatting
+temp_legend <- ggplot(ICUMort.f, aes(ICUType)) +
+          geom_bar(position = "fill", aes(fill=factor(in_hospital_death, labels = c("No", "Yes")))) +
+          theme(legend.direction = "horizontal", legend.position = "bottom") + labs(fill = "Died") 
+
+# create get_legend function
+get_legend<-function(myggplot){
+  tmp <- ggplot_gtable(ggplot_build(myggplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)
+}
+
+# Extract legend using get_legend function
+legend <- get_legend(temp_legend)
+
+#plot grid of output
 n <- length(plot_list)
 nCol <- 4
-do.call("grid.arrange", c(plot_list, ncol=nCol))
+do.call("grid.arrange", c(grobs=c(plot_list,list(legend)), ncol=nCol))
 
 #review relationships with gender
 #Create empty list for plotting
@@ -378,13 +436,15 @@ for (i in names(ICUMort.f)[1:12]){
                                            labels = c("No","Yes")))) + 
             coord_cartesian(ylim = ybl) +
             labs(y=i, fill="Died", 
-                 title = paste0("Density Plot of ", i,",\n",
-                                length(na.omit(ICUMort.f[[i]]))," values available")) + theme(text = element_text(size=6))
+                 title = paste0("Boxplot of ", i)) + theme(text = element_text(size=6)) +
+      theme(legend.position = "none")
       
           }
 }
-do.call("grid.arrange", c(plot_list2, ncol=nCol))
-#possible interactions: Glucose:Gender, BUN:Gender, RespRate:Gender, Age:Gender
+
+
+do.call("grid.arrange", c(grobs=c(plot_list2,list(legend)), ncol=nCol))
+#possible interactions: ALP_max:Gender, BUN_min:Gender, Lactate_diff:Gender, Age:Gender
 
 #review relationships with ICUtype
 plot_list3 <- list()
@@ -394,18 +454,16 @@ for (i in names(ICUMort.f[1:12])){
     ybl <- ybl * c(.75,1.25)
     plot_list3[[i]] <- 
       ggplot(ICUMort.f, aes_string(x = "ICUType", y = i)) +
-      geom_boxplot(outlier.colour = NA, aes(fill = factor(in_hospital_death, 
-                                                labels = c("No","Yes")))) + 
+      geom_boxplot(outlier.colour = NA, aes(fill = factor(in_hospital_death, labels = c("No","Yes")))) + 
       coord_cartesian(ylim = ybl) +
       labs(y=i, fill="Died", 
-           title = paste0("Density Plot of ", i,",\n ",                                                length(na.omit(ICUMort.f[[i]])),
-                          " values available")) + 
-      theme(text = element_text(size = 6))
+           title = paste0("Boxplot of ", i)) + 
+      theme(text = element_text(size = 6)) + theme(legend.position = "none")
       
           }
 }
-do.call("grid.arrange", c(plot_list3, ncol = nCol))
-#possible interactions: all variables appear to have some interaction with ICU type. Explored further later.
+do.call("grid.arrange", c(grobs=c(plot_list3,list(legend)), ncol = nCol))
+#possible interactions: all variables appear to have some interaction with ICU type except WCC and lactate. Explored further later.
 
 
 #correlation plot to  explore relationships
@@ -413,17 +471,35 @@ library(corrplot)
 ICUMort.cor <- cor(ICUMort.f[,sapply(ICUMort.f, is.numeric)])
 corrplot(ICUMort.cor,  method = "circle", type = "upper")
 
-#further explore noted correlations
-#unexpected correlation
-plot_1 <-ggplot(ICUMort.f, aes(RespRate_min, GCS_max, colour = factor(in_hospital_death, labels = c("No","Yes")))) + geom_point(position = "jitter") + geom_smooth(method="lm") + labs(colour="Died")
+#no noted correlation beyond those expected with SAPS1
 
-#PaO2 not part of SAPS1, unexpected correlation
-plot_2 <- ggplot(ICUMort.f, aes(PaO2_max, SAPS1, colour = factor(in_hospital_death, labels = c("No","Yes")))) + geom_point(position = "jitter") + geom_smooth(method="lm") + labs(colour="Died")
+#check each variable against eachother seperated by outcome
+# for(i in 2:(length(ICUMort.f)-1)){
+#     colnam <- names(ICUMort.f[i])
+#     if(is.numeric(ICUMort.f[[i]])==TRUE){
+#         for(j in (i+1):length(ICUMort.f)){
+#             colnam2 <- names(ICUMort.f[j])
+#             if(is.numeric(ICUMort.f[[j]])==TRUE){
+#             gp <- ggplot(ICUMort.f, aes(ICUMort.f[[i]],ICUMort.f[[j]], colour = factor(in_hospital_death, labels = c("No","Yes")))) + 
+#                      geom_point() +
+#                 labs(title=paste("Plot of",colnam,"vs",colnam2),x=colnam,y=colnam2,colour="Died") + geom_smooth(method="lm")
+#             #abline(lm(ICUMort.f[[j]]~ICUMort.f[[i]]),col="red")
+#             print(gp)
+#                 }
+#             }
+#         }
+# }
 
-#GCS part of SAPS1 score - expected correlation
-plot_3 <- ggplot(ICUMort.f, aes(GCS_max, SAPS1, colour = factor(in_hospital_death, labels = c("No","Yes")))) + geom_point(position = "jitter") + geom_smooth(method="lm") + labs(colour="Died")
+#only BUN_min:Urine_max, HR_min:GCS_max noted as possibilities
+intplot1 <- ggplot(ICUMort.f, aes(BUN_min,Urine_max, colour = factor(in_hospital_death, labels = c("No","Yes")))) + 
+                geom_point() + geom_smooth(method="lm") + theme(legend.position = "none") +
+                labs(title=paste("Plot of BUN_min vs Urine_max"),colour="Died")
+                
+intplot2 <- ggplot(ICUMort.f, aes(HR_min,GCS_max, colour = factor(in_hospital_death, labels = c("No","Yes")))) + 
+                geom_point() + geom_smooth(method="lm") + theme(legend.position = "none") +
+                labs(title=paste("Plot of HR_min vs GCS_max"),colour="Died")
 
-grid.arrange(plot_1, plot_2, plot_3, ncol = 2)
+grid.arrange(intplot1, intplot2, ncol=1, bottom = legend)
 ```
 
 ##Fit Univariate Models
@@ -432,47 +508,51 @@ grid.arrange(plot_1, plot_2, plot_3, ncol = 2)
 
 #Should start with univariate models for each of the variables we included.
 #Create vector of variables
-summary(glm(in_hospital_death ~ . , family = binomial(), data = ICUMort.f))
-var_selection <- c("SAPS1", "Age", "Bilirubin_diff", "BUN_min", "GCS_max", "ICUType", "MAP_max", "PaO2_max", "Platelets_diff", "RespRate_min", "WBC_max", "Gender", "in_hospital_death")
+var_selection <- c("Age", "GCS_max", "SAPS1", "HR_min", "ALP_max", "PaO2_max", "Urine_max", "BUN_min", "WBC_max", "ICUType", "Lactate_diff", "Gender", "in_hospital_death")
 #Create a list of univariate models for each of the variables selected
 formulas<- paste('in_hospital_death ~', var_selection[1:12])
 unimod_list <- lapply(formulas, glm, family = binomial(), data = ICUMort.f)
 #Summary of all models
 unimod_summ <- lapply(unimod_list, summary)
-unimod_summ
-#Pull out P values
-lapply(unimod_summ, function(x) {(coef(x)[,4])})
-#All variables except MAP_max, WBC_max and Gender are significant in univariate models
+lapply(unimod_summ, function(x) {round(x$coefficients, 6)})
+
+#check possible quadric interactions on HR_min and WBC_max
+summary(glm(in_hospital_death ~ I(HR_min^2), family = binomial(), data = ICUMort.f))
+summary(glm(in_hospital_death ~ I(WBC_max^2), family = binomial(), data = ICUMort.f))
+#improves HR_min, not WBC_max, neither enough to warrant use
+
+#All variables except WBC_max and Gender are significant in univariate models
 #Extract exp of coefficients - odds for each variable
 unimod_odds <- lapply(unimod_list, function(x) {exp(coef(x))})
 unimod_odds
 
 #Check interactions from EDA
-var_int_selection <- c("Age:Gender", "BUN_min:Age", "GCS_max:RespRate_min", "GCS_max:Gender", "Platelets_diff:Gender", "RespRate_min:Gender", "SAPS1:ICUType", "Age:ICUType", "Bilirubin_diff:ICUType", "BUN_min:ICUType", "GCS_max:ICUType", "MAP_max:ICUType", "PaO2_max:ICUType", "Platelets_diff:ICUType", "RespRate_min:ICUType", "Gender:ICUType")
+var_int_selection <- c("BUN_min:Urine_max", "I(HR_min^2):GCS_max", "HR_min:GCS_max", "ALP_max:Gender", "BUN_min:Gender", "Lactate_diff:Gender", "Age:Gender", "Age:ICUType", "GCS_max:ICUType", "SAPS1:ICUType", "I(HR_min^2):ICUType", "HR_min:ICUType", "ALP_max:ICUType", "PaO2_max:ICUType", "Urine_max:ICUType", "BUN_min:ICUType", "Gender:ICUType")
 formulas_int<- paste('in_hospital_death ~', var_int_selection)
 unimod_int_list <- lapply(formulas_int, glm, family = binomial(), data = ICUMort.f)
 unimod_int_summ <- lapply(unimod_int_list, summary)
-unimod_int_summ
+lapply(unimod_int_summ, function(x) {round(x$coefficients, 6)})
 
-#all interactions statistically significant
+
+#Only BUN_min:Urine_max not significant, keep qudratic term for HR interaction with ICUType. Keep original with GCS_max as not improved.
 
 ```
 
-Most variables which were significant in the univariate models appear to individually have a small effect on the risk of death.  Variables that increase the risk of death with aunit increase of the variable include SAPS1, Age, Bilirubin_diff, BUN_min, Platelets_diff and RespRate_min, with all increasing risk by between 0.1% - 13%. Variable that decrease risk were GCS_max (~16%), and PaO2_max (0.002%).
+Most variables which were significant in the univariate models appear to individually have a small effect on the risk of death.  Variables that increase the risk of death with a unit increase of the variable include SAPS1, Age, BUN_min, HR_min, ALP_max and WBC_max, with all increasing risk by between 0.01% - 13%. Variable that decrease risk were GCS_max (~16%), Urine_max (0.02%) and PaO2_max (0.002%).
 
-There are also many significant interactions between Age, Gender, ICUType and other variables.
+There are also many significant interactions between the continuous and categorical variables.
 
 ##Fit Mutivariable Models
 
 ```{r, task 1 multivariate models}
 #Only include statisically significant variables from above. cut off 0.05.
-full_mod<-glm(in_hospital_death ~ SAPS1 + Age + Bilirubin_diff + BUN_min + GCS_max + ICUType + PaO2_max + 
-                Platelets_diff + RespRate_min, family = binomial(), data = ICUMort.f)
+full_mod<-glm(in_hospital_death ~ SAPS1 + Age + BUN_min + GCS_max + ALP_max + ICUType + PaO2_max + Urine_max +
+                Lactate_diff, family = binomial(), data = ICUMort.f)
 summary(full_mod)
 #check statistically significant values
 #create statistically significant model
-sig_full_mod<-glm(in_hospital_death ~ SAPS1 + Age + Bilirubin_diff + BUN_min + GCS_max + ICUType + PaO2_max 
-                , family = binomial(), data = ICUMort.f)
+sig_full_mod<-glm(in_hospital_death ~ Age + GCS_max + SAPS1 + ALP_max + PaO2_max + Urine_max + BUN_min +
+                    ICUType + Lactate_diff, family = binomial(), data = ICUMort.f)
 summary(sig_full_mod)
 
 #compare full with statistically significant for anova and AIC
@@ -486,18 +566,21 @@ red_full_mod <- step(full_mod, trace = 0)
 anova(red_full_mod, sig_full_mod, test = "Chisq")
 red_full_mod$aic
 sig_full_mod$aic
-#test not significant, AIC similar, we can accept the simpler model with PaO2 removed - sig_full_mod
+#model unable to be improved
 f.mod1 <- sig_full_mod ##SHould this be red_full_mod??
 
 #Statistically significant interactions from individual models above
-int_mod<-glm(in_hospital_death ~  Age:Gender + BUN_min:Age + GCS_max:RespRate_min + GCS_max:Gender + Platelets_diff:Gender + RespRate_min:Gender + SAPS1:ICUType + Age:ICUType + Bilirubin_diff:ICUType + BUN_min:ICUType + GCS_max:ICUType + MAP_max:ICUType + PaO2_max:ICUType + Platelets_diff:ICUType + RespRate_min:ICUType + Gender:ICUType, family = binomial(), data = ICUMort.f)
+int_mod<-glm(in_hospital_death ~  HR_min:GCS_max + ALP_max:Gender + BUN_min:Gender + Lactate_diff:Gender + Age:Gender + 
+               Age:ICUType + GCS_max:ICUType + SAPS1:ICUType + I(HR_min^2):ICUType + ALP_max:ICUType + PaO2_max:ICUType +
+               Urine_max:ICUType + BUN_min:ICUType + Gender:ICUType, family = binomial(), data = ICUMort.f)
 summary(int_mod)
 #check statistically significant values
 coef.df <- as.data.frame(summary(int_mod)$coefficients)
 as.matrix(coef.df[coef.df$`Pr(>|z|)`<0.05,])
 #Age:BUN_min, GCS_max:Gender, SAPS1:ICUType, Bilirubin_diff:ICUType, BUN_min:ICUType, GCS_max:ICUType, PaO2_max:ICUType
 #create statistically significant model
-sig_int_mod<-glm(in_hospital_death ~ BUN_min:Age + GCS_max:Gender + SAPS1:ICUType + Bilirubin_diff:ICUType + BUN_min:ICUType + GCS_max:ICUType + PaO2_max:ICUType, family = binomial(), data = ICUMort.f)
+sig_int_mod<-glm(in_hospital_death ~ HR_min:GCS_max + BUN_min:Gender + Lactate_diff:Gender +
+               Age:ICUType + GCS_max:ICUType + SAPS1:ICUType + I(HR_min^2):ICUType + Gender:ICUType, family = binomial(), data = ICUMort.f)
 summary(sig_int_mod)
 
 #compare full with statistically significant for anova and AIC
@@ -515,11 +598,10 @@ int_mod$aic
 f.mod2 <- red_int_mod
 
 #Full model with interactions
-full_int_mod <-glm(in_hospital_death ~ SAPS1 + Age + Bilirubin_diff + BUN_min + GCS_max + ICUType + PaO2_max + 
-                Platelets_diff + RespRate_min + Age:Gender + BUN_min:Age + GCS_max:RespRate_min + GCS_max:Gender +
-                Platelets_diff:Gender + RespRate_min:Gender + SAPS1:ICUType + Age:ICUType + Bilirubin_diff:ICUType +
-                BUN_min:ICUType + GCS_max:ICUType + MAP_max:ICUType + PaO2_max:ICUType + Platelets_diff:ICUType +
-                RespRate_min:ICUType + Gender:ICUType, family = binomial(), data = ICUMort.f)
+full_int_mod <-glm(in_hospital_death ~ SAPS1 + Age + BUN_min + GCS_max + ALP_max + ICUType + PaO2_max + Urine_max +
+                Lactate_diff + HR_min:GCS_max + ALP_max:Gender + BUN_min:Gender + Lactate_diff:Gender + Age:Gender + 
+               Age:ICUType + GCS_max:ICUType + SAPS1:ICUType + I(HR_min^2):ICUType + ALP_max:ICUType + PaO2_max:ICUType +
+               Urine_max:ICUType + BUN_min:ICUType + Gender:ICUType, family = binomial(), data = ICUMort.f)
 summary(full_int_mod)
 #check statistically significant values
 # coef.df <- as.data.frame(summary(full_int_mod)$coefficients)
@@ -527,9 +609,8 @@ summary(full_int_mod)
 #pH_diff, BUN_min, Na_max, GCS_max, Age, ICUType, Gender, Age:Gender, PaO2_max:ICUType, GCS_max:ICUType
 
 #create statistically significant model at 0.1
-sig_full_int_mod<-glm(in_hospital_death ~ SAPS1 + GCS_max + ICUType + PaO2_max + Age:Gender + GCS_max:Gender +
-                        SAPS1:ICUType + GCS_max:ICUType,
-                      family = binomial(), data = ICUMort.f)
+sig_full_int_mod<-glm(in_hospital_death ~ SAPS1 + BUN_min + GCS_max + Lactate_diff + GCS_max:ICUType + PaO2_max +
+                        Gender:ICUType + SAPS1:ICUType, family = binomial(), data = ICUMort.f)
 summary(sig_full_int_mod)
 
 #compare full with statistically significant for anova and AIC
@@ -555,9 +636,6 @@ anova(f.mod3, null_mod, test = "Chisq")
 #All tests statistically significant - Reject null hypothesis of no relationship between predictors and outcome for all models
 
 #compare chosen models
-anova(f.mod1, f.mod2, test = "Chisq")
-f.mod1$aic
-f.mod2$aic
 #model 2 is preferable to model 1 based on AIC
 anova(f.mod1, f.mod3, test = "Chisq")
 f.mod1$aic
@@ -575,6 +653,10 @@ f.mod3$aic
 ```{r, Task1, goodness of fit}
 
 #possible models - sig_full_mod (f.mod1), red_int_mod (f.mod2), red_full_int_mod (f.mod3)
+print("AIC scores for selected models")
+f.mod1$aic
+f.mod2$aic
+f.mod3$aic
 
 #Calculate the Hosmer-Lemeshow statistic
 #linear predictors
@@ -704,22 +786,21 @@ There appears to be a strong difference between the physiological variables and 
 
 ```{r multimodel method for each ICU type}
 #review analysis of ICUType specific models, create data frames
-ICUMort.CCU <- ICUMort.t[ICUMort.t$ICUType=="Coronary Care Unit",]
+ICUMort.CCU <- ICUMort.f[ICUMort.f$ICUType=="Coronary Care Unit",]
 ICUMort.CCU <- within(ICUMort.CCU, rm(ICUType))
-ICUMort.MICU <- ICUMort.t[ICUMort.t$ICUType=="Medical ICU",]
+ICUMort.MICU <- ICUMort.f[ICUMort.f$ICUType=="Medical ICU",]
 ICUMort.MICU <- within(ICUMort.MICU, rm(ICUType))
-ICUMort.SICU <- ICUMort.t[ICUMort.t$ICUType=="Surgical ICU",]
+ICUMort.SICU <- ICUMort.f[ICUMort.f$ICUType=="Surgical ICU",]
 ICUMort.SICU <- within(ICUMort.SICU, rm(ICUType))
-ICUMort.CSRU <- ICUMort.t[ICUMort.t$ICUType=="Cardiac Surgery Recovery Unit",]
+ICUMort.CSRU <- ICUMort.f[ICUMort.f$ICUType=="Cardiac Surgery Recovery Unit",]
 ICUMort.CSRU <- within(ICUMort.CSRU, rm(ICUType))
 
 
 #Should start with univariate models for each of the variables we included.
 #Create vector of variables
-test.list.ICUtype <- test.list[test.list!="ICUType" & test.list!="in_hospital_death"]
-
+var_selection <- c("Age", "GCS_max", "SAPS1", "HR_min", "ALP_max", "PaO2_max", "Urine_max", "BUN_min", "WBC_max", "Lactate_diff", "Gender")
 #Create a list of univariate models for each of the variables selected
-formulas<- paste('in_hospital_death ~', test.list.ICUtype)
+formulas<- paste('in_hospital_death ~', var_selection)
 unimod.list.CCU <- lapply(formulas, glm, family = binomial(), data = ICUMort.CCU)
 unimod.list.MICU <- lapply(formulas, glm, family = binomial(), data = ICUMort.MICU)
 unimod.list.SICU <- lapply(formulas, glm, family = binomial(), data = ICUMort.SICU)
@@ -733,40 +814,29 @@ unimod.list.CRSU <- lapply(formulas, glm, family = binomial(), data = ICUMort.CS
 
 
 #full models using most statistically significant output from each univariable group with added interaction between age and gender
-CCU.full.mod <- glm(in_hospital_death ~ Age + Bilirubin_diff + BUN_max + GCS_max +
-                      Gender + Glucose_max + MAP_min + Na_diff + PaO2_diff + pH_diff +
-                      Platelets_min + RespRate_max + TroponinI_max + WBC_max + SAPS1 +
-                      Age:Gender
-                      , data=ICUMort.CCU, family="binomial")
+CCU.full.mod <- glm(in_hospital_death ~ Age + GCS_max + SAPS1 + ALP_max + Urine_max + BUN_min + WBC_max + Lactate_diff +
+                      Age:Gender, data=ICUMort.CCU, family="binomial")
 (sum.full.CCU <- summary(CCU.full.mod))
 #significant predictors at 0.1 - BUN_max, GCS_max, SAPS1
 
-MICU.full.mod <- glm(in_hospital_death ~ Age + Bilirubin_min + BUN_min + GCS_min +
-                       Gender + Glucose_min + MAP_min + Na_max + PaO2_min + pH_min +
-                       Platelets_min + RespRate_max + TroponinI_max + WBC_diff + SAPS1 +
-                       Age:Gender
-                       , data=ICUMort.MICU, family="binomial")
+MICU.full.mod <- glm(in_hospital_death ~ Age + GCS_max + SAPS1 + HR_min + ALP_max + Urine_max +
+                       BUN_min + Lactate_diff + Gender + Age:Gender, data=ICUMort.MICU, family="binomial")
 (sum.full.MICU <- summary(MICU.full.mod))
 #significant predictors at 0.1 - Age, BUN_min, Na_max, Platelets_dif, WBC_max, SAPS1
 
-SICU.full.mod <- glm(in_hospital_death ~ Age + Bilirubin_min + BUN_min + GCS_max + Gender +
-                       Glucose_max + MAP_diff + Na_diff + PaO2_min + pH_diff + Platelets_max +
-                       RespRate_min + TroponinI_max + WBC_diff + SAPS1 + Age:Gender
-                     , data=ICUMort.SICU, family="binomial")
+SICU.full.mod <- glm(in_hospital_death ~ Age + GCS_max + SAPS1 + HR_min + Urine_max +
+                       BUN_min + Lactate_diff + Gender + Age:Gender, data=ICUMort.SICU, family="binomial")
 (sum.full.SICU <- summary(SICU.full.mod))
 #significant predictors at 0.05 - Age, BUN_min,GCS_max, Gender, pH_diff, RespRate_min, TroponinI_diff, WBC_min, SAPS1
 
-CSRU.full.mod <- glm(in_hospital_death ~ Age + Bilirubin_max + BUN_max + GCS_max + Gender + 
-                       Glucose_min + MAP_min + Na_diff + PaO2_max + pH_max + Platelets_max +
-                       RespRate_max + TroponinI_max + WBC_min + SAPS1 + Age:Gender
-                     , data=ICUMort.CSRU, family="binomial")
+CSRU.full.mod <- glm(in_hospital_death ~ GCS_max + PaO2_max + Urine_max + BUN_min + Lactate_diff +
+                       Age:Gender, data=ICUMort.CSRU, family="binomial")
 (sum.full.CSRU <- summary(CSRU.full.mod))
 #significant predictors at 0.05 - BUN_min, GCS_max, Na_diff, PaO2_max, pH_max, Platelets_max, WBC_min
 
 #significan models - keeping Age:Gender as a predictor
 #CCU
-CCU.sig.mod <- glm(in_hospital_death ~ BUN_max + GCS_max + PaO2_diff +
-                      SAPS1 + Age:Gender, data=ICUMort.CCU, family="binomial")
+CCU.sig.mod <- glm(in_hospital_death ~ BUN_min + GCS_max + SAPS1 + Age:Gender, data=ICUMort.CCU, family="binomial")
 (sum.sig.CCU <- summary(CCU.sig.mod))
 anova(CCU.full.mod, CCU.sig.mod, test="Chisq")
 CCU.full.mod$aic
@@ -783,12 +853,12 @@ CCU.red.mod$aic
 mean((predict(CCU.sig.mod, type = "response") - ICUMort.CCU$in_hospital_death)^2)
 mean((predict(CCU.red.mod, type = "response") - ICUMort.CCU$in_hospital_death)^2)
 
-#fit better for significant model - keep
+#slightly better fit for significant model on brier score (0.101 vs 0.102) - keep
 CCU.mod <- CCU.sig.mod
 
 #MICU
-MICU.sig.mod <- glm(in_hospital_death ~ Bilirubin_min + BUN_min + Gender + Na_max + TroponinI_max +
-                       SAPS1 + Age:Gender, data=ICUMort.MICU, family="binomial")
+MICU.sig.mod <- glm(in_hospital_death ~ SAPS1 + HR_min + ALP_max + BUN_min + Lactate_diff + Age:Gender
+                    , data=ICUMort.MICU, family="binomial")
 (sum.sig.MICU <- summary(MICU.sig.mod))
 anova(MICU.full.mod, MICU.sig.mod, test="Chisq")
 MICU.full.mod$aic
@@ -798,12 +868,14 @@ MICU.red.mod <- step(MICU.full.mod, trace=0)
 anova(MICU.full.mod, MICU.red.mod, test="Chisq")
 MICU.full.mod$aic
 MICU.red.mod$aic
-#not statistically different, AIC much improved in reduced model. Age:Gender interaction retained in reduced model - keep reduced
+#not statistically different, AICs the same between red and sig. check brier score
+mean((predict(MICU.sig.mod, type = "response") - ICUMort.MICU$in_hospital_death)^2)
+mean((predict(MICU.red.mod, type = "response") - ICUMort.MICU$in_hospital_death)^2)
+#reduced model slightly better, keep
 MICU.mod <- MICU.red.mod
 
 #SICU
-SICU.sig.mod <- glm(in_hospital_death ~ Age + BUN_min + GCS_max + Glucose_max + RespRate_min +
-                      SAPS1 + Age:Gender, data=ICUMort.SICU, family="binomial")
+SICU.sig.mod <- glm(in_hospital_death ~ Age + BUN_min + GCS_max + SAPS1 + Age:Gender, data=ICUMort.SICU, family="binomial")
 (sum.sig.SICU <- summary(SICU.sig.mod))
 anova(SICU.full.mod, SICU.sig.mod, test="Chisq")
 SICU.full.mod$aic
@@ -817,33 +889,33 @@ SICU.red.mod$aic
 #compare brier scores
 mean((predict(SICU.sig.mod, type = "response") - ICUMort.SICU$in_hospital_death)^2)
 mean((predict(SICU.red.mod, type = "response") - ICUMort.SICU$in_hospital_death)^2)
-#marginally better for reduced model
-SICU.mod <- SICU.red.mod
+#marginally better for sig model
+SICU.mod <- SICU.sig.mod
 
 
-CSRU.sig.mod <- glm(in_hospital_death ~ BUN_max + GCS_max + Na_diff + Platelets_max +
-                      pH_max + SAPS1 + Age:Gender, data=ICUMort.CSRU, family="binomial")
+CSRU.sig.mod <- glm(in_hospital_death ~ BUN_min + GCS_max + PaO2_max + Age:Gender
+                       , data=ICUMort.CSRU, family="binomial")
 (sum.sig.CSRU <- summary(CSRU.sig.mod))
 anova(CSRU.full.mod, CSRU.sig.mod, test="Chisq")
 CSRU.full.mod$aic
 CSRU.sig.mod$aic
-#not statistically different, AIC improved in sig model. Added platelets from stepwise reduction with good effect
+#not statistically different, AIC worse in sig model.
 CSRU.red.mod <- step(CSRU.full.mod, trace=0)
 anova(CSRU.full.mod, CSRU.red.mod, test="Chisq")
 CSRU.full.mod$aic
 CSRU.red.mod$aic
-#not statistically different, AIC improved in reduced model. 
-#compare brier scores
-mean((predict(CSRU.sig.mod, type = "response") - ICUMort.CSRU$in_hospital_death)^2)
+#not statistically different, AIC slighly improved in reduced model.
+#compare brier scores between full and reduced
+mean((predict(CSRU.full.mod, type = "response") - ICUMort.CSRU$in_hospital_death)^2)
 mean((predict(CSRU.red.mod, type = "response") - ICUMort.CSRU$in_hospital_death)^2)
-#Keep red model.
-CSRU.mod <- CSRU.red.mod
+#Marginal Keep full model.
+CSRU.mod <- CSRU.full.mod
 
 
 #check goodness of fit
 #Calculate the Hosmer-Lemeshow statistic
 #linear predictors
-library(ResourceSelection)
+
 #Vector of predicted probabilities
 pred.CCU <- predict(CCU.mod, type = "response")
 (hl_CCU <- hoslem.test(CCU.mod$y, pred.CCU, g=30))
@@ -892,7 +964,7 @@ mean((null.CSRU - ICUMort.CSRU$in_hospital_death)^2)
 
 #Brier score indicates that the reduced and full models are better than the null, but nor by a huge degree.
 #PseudoR2
-library(DescTools)
+
 #PsuedoR2 models under question
 a <- t(PseudoR2(CCU.mod, which = "all"))
 b <- t(PseudoR2(MICU.mod, which = "all"))
@@ -908,26 +980,27 @@ round(psudortbl_2,4)
 #compare to models for all ICU units
 round(psudortbl_1,4)
 #Seperate models per ICU give better psuedo R2 values.
+
+#create column for predicted probability
+ICUMort.f$predprob <- 0
+
+#populate probability for individual unit types across whole data set
+ICUMort.f[ICUMort.f$ICUType=="Coronary Care Unit",] %>% mutate(predprob=predict(CCU.mod, type="response")) -> ICUMort.f[ICUMort.f$ICUType=="Coronary Care Unit",]
+ICUMort.f[ICUMort.f$ICUType=="Medical ICU",] %>% mutate(predprob=predict(MICU.mod, type="response")) -> ICUMort.f[ICUMort.f$ICUType=="Medical ICU",]
+ICUMort.f[ICUMort.f$ICUType=="Surgical ICU",] %>% mutate(predprob=predict(SICU.mod, type="response")) -> ICUMort.f[ICUMort.f$ICUType=="Surgical ICU",]
+ICUMort.f[ICUMort.f$ICUType=="Cardiac Surgery Recovery Unit",] %>% mutate(predprob=predict(CSRU.mod, type="response")) -> ICUMort.f[ICUMort.f$ICUType=="Cardiac Surgery Recovery Unit",]
+
+#brier score for overall model
+mean((ICUMort.f$predprob - ICUMort.f$in_hospital_death)^2)
+mean((pred_null - ICUMort.f$in_hospital_death)^2)
+
 ```
 
 
 ```{r multi unit analysis prediction}
-#create column for predicted probability
-ICUMort.t$predprob <- 0
-
-#populate probability for individual unit types across whole data set
-ICUMort.t[ICUMort.t$ICUType=="Coronary Care Unit",] %>% mutate(predprob=predict(CCU.mod, type="response")) -> ICUMort.t[ICUMort.t$ICUType=="Coronary Care Unit",]
-ICUMort.t[ICUMort.t$ICUType=="Medical ICU",] %>% mutate(predprob=predict(MICU.mod, type="response")) -> ICUMort.t[ICUMort.t$ICUType=="Medical ICU",]
-ICUMort.t[ICUMort.t$ICUType=="Surgical ICU",] %>% mutate(predprob=predict(SICU.mod, type="response")) -> ICUMort.t[ICUMort.t$ICUType=="Surgical ICU",]
-ICUMort.t[ICUMort.t$ICUType=="Cardiac Surgery Recovery Unit",] %>% mutate(predprob=predict(CSRU.mod, type="response")) -> ICUMort.t[ICUMort.t$ICUType=="Cardiac Surgery Recovery Unit",]
-
-#brier score for overall model
-mean((ICUMort.t$predprob - ICUMort.t$in_hospital_death)^2)
-mean((pred_null - ICUMort.t$in_hospital_death)^2)
-
 #plot ROC for multi unit model
 par(pty="s")
-plot.roc(oc, ICUMort.t$predprob,auc.polygon = TRUE,
+plot.roc(oc, ICUMort.f$predprob,auc.polygon = TRUE,
          auc.polygon.col=rgb(1,1,0.1, alpha = 0.3), col = "yellow",
          legacy.axes = TRUE, print.auc = TRUE, 
          print.auc.y = 0.2, print.auc.col = "orange")
@@ -943,19 +1016,90 @@ plot.roc(oc, pred_mod2, auc.polygon = TRUE,
          legacy.axes=TRUE, print.auc = TRUE, print.auc.x = 0.3, 
          print.auc.y = 0.4)
 legend("bottomleft",
-       legend=c("Split ICU model", "Multivariable Interation Model", 
-                "Interaction Model"),
+       legend=c("Split ICU model", "Multivariable Interation Model", "Interaction Model"),
        title="Models:", 
-       fill=c(rgb(1,1,0.1, alpha = 0.3),
-              rgb(.1,0.9,0.1, alpha = 0.3),
-              rgb(.1,0.1,0.9, alpha = 0.3)), 
-       inset=c(0.1,0.1), cex = 0.4)
+       fill=c(rgb(1,1,0.1, alpha = 0.3),rgb(.1,0.9,0.1, alpha = 0.3),rgb(.1,0.1,0.9, alpha = 0.3)), 
+       inset=c(0.1,0.1))
+
+#refit previous models  to icu_patients_df0
+
+
+df0.f <- icu_patients_df0[,c("Age", "GCS_max", "SAPS1", "HR_min", "ALP_max", "PaO2_max", "Urine_max", "BUN_min", "ICUType", "Lactate_diff", "Gender", "in_hospital_death")]
+df0.f <- df0.f[complete.cases(df0.f),]
+
+summary(df0.f)
+val.mod1 <- glm(in_hospital_death ~ Age + GCS_max + SAPS1 + ALP_max + 
+                PaO2_max + Urine_max + BUN_min + ICUType + Lactate_diff, 
+                family = binomial(), data = df0.f)
+val.mod2 <- glm(in_hospital_death ~ HR_min:GCS_max + ALP_max:Gender + 
+                Gender:BUN_min + Gender:Lactate_diff + Age:ICUType + GCS_max:ICUType + 
+                ICUType:SAPS1 + ICUType:I(HR_min^2) + ICUType:PaO2_max + 
+                ICUType:Urine_max + BUN_min:ICUType + Gender:ICUType, family = binomial(), 
+                data = df0.f)
+
+val.mod3 <- glm(in_hospital_death ~ SAPS1 + Age + BUN_min + GCS_max + 
+                ALP_max + ICUType + PaO2_max + Urine_max + Lactate_diff + 
+                GCS_max:HR_min + Age:ICUType + GCS_max:ICUType + SAPS1:ICUType + 
+                BUN_min:ICUType + ICUType:Gender, family = binomial(), data = df0.f)
+
+
+CCU.val.mod <- glm(in_hospital_death ~ BUN_min + GCS_max + SAPS1 + 
+    Age:Gender, family = "binomial", data = df0.f[df0.f$ICUType=="Coronary Care Unit",])
+
+MICU.val.mod <- glm(in_hospital_death ~ Age + SAPS1 + HR_min + ALP_max + 
+    Urine_max + BUN_min + Lactate_diff + Gender, family = "binomial", 
+    data = df0.f[df0.f$ICUType=="Medical ICU",])
+
+SICU.val.mod <- glm(in_hospital_death ~ Age + BUN_min + GCS_max + SAPS1 + 
+    Age:Gender, family = "binomial", data = df0.f[df0.f$ICUType=="Surgical ICU",])
+
+CSRU.val.mod <- glm(in_hospital_death ~ GCS_max + PaO2_max + Urine_max + 
+    BUN_min + Lactate_diff + Age:Gender, family = "binomial", 
+    data = df0.f[df0.f$ICUType=="Cardiac Surgery Recovery Unit",])
+
+#create column for predicted probability
+df0.f$predprob <- 0
+#populate probability for individual unit types across whole data set
+df0.f[df0.f$ICUType=="Coronary Care Unit",] %>% mutate(predprob=predict(CCU.val.mod, type="response")) -> df0.f[df0.f$ICUType=="Coronary Care Unit",]
+df0.f[df0.f$ICUType=="Medical ICU",] %>% mutate(predprob=predict(MICU.val.mod, type="response")) -> df0.f[df0.f$ICUType=="Medical ICU",]
+df0.f[df0.f$ICUType=="Surgical ICU",] %>% mutate(predprob=predict(SICU.val.mod, type="response")) -> df0.f[df0.f$ICUType=="Surgical ICU",]
+df0.f[df0.f$ICUType=="Cardiac Surgery Recovery Unit",] %>% mutate(predprob=predict(CSRU.val.mod, type="response")) -> df0.f[df0.f$ICUType=="Cardiac Surgery Recovery Unit",]
+
+
+#plot ROC for multi unit model
+par(pty="s")
+plot.roc(df0.f$in_hospital_death, df0.f$predprob,auc.polygon = TRUE,
+         auc.polygon.col=rgb(1,1,0.1, alpha = 0.3), col = "yellow",
+         legacy.axes = TRUE, print.auc = TRUE, 
+         print.auc.y = 0.2, print.auc.col = "orange")
+
+#Compare to best model for all ICU units
+plot.roc(df0.f$in_hospital_death, predict(val.mod1, type="response"), auc.polygon = TRUE, 
+         auc.polygon.col=rgb(.9,0.1,0.1, alpha = 0.3),add=TRUE, col="green",
+         legacy.axes = TRUE, print.auc = TRUE, print.auc.x = 0.4, 
+         print.auc.y = 0.3)
+#Compare to best model for all ICU units
+plot.roc(df0.f$in_hospital_death, predict(val.mod2, type="response"), auc.polygon = TRUE, 
+         auc.polygon.col=rgb(.1,0.9,0.1, alpha = 0.3),add=TRUE, col="green",
+         legacy.axes = TRUE, print.auc = TRUE, print.auc.x = 0.4, 
+         print.auc.y = 0.3)
+#Add best model without any interactions
+plot.roc(df0.f$in_hospital_death, predict(val.mod3, type="response"), auc.polygon = TRUE, 
+         auc.polygon.col=rgb(.1,0.1,0.9, alpha = 0.3), add=TRUE, col="blue", 
+         legacy.axes=TRUE, print.auc = TRUE, print.auc.x = 0.3, 
+         print.auc.y = 0.4)
+legend("bottomleft",
+       legend=c("Split ICU model", "Multivarialable Model","Multivariable Interaction Model", "Interaction Model"),
+       title="Models:", 
+       fill=c(rgb(1,1,0.1, alpha = 0.3),rgb(.9,0.1,0.1, alpha = 0.3),rgb(.1,0.9,0.1, alpha = 0.3),rgb(.1,0.1,0.9, alpha = 0.3)), 
+       inset=c(0.1,0.1))
+
 ```
 
 ```{r confusion matrix for best performing models}
 #Calculate confusion matrix
 #Use outcomes from seperate models for ICUtypes
-pred_oc_ICUmods <-as.factor(ifelse(ICUMort.t$predprob < 0.5, "no", "yes"))
+pred_oc_ICUmods <-as.factor(ifelse(ICUMort.f$predprob < 0.5, "no", "yes"))
 (ICUmods_cm <-confusionMatrix(pred_oc_ICUmods, ocf, positive = "yes"))
 
 #The models seperated by ICU perform better than the single model, but it is a marginal increase.  In practice this maybe hard to implement, as different models would be required for different units.  
@@ -992,7 +1136,6 @@ In this task, you are required to develop a Cox proportional hazards survival mo
 
 ```{r data-setup}
 library(survival)
-library(tidyverse)
 library(rankhazard)
 library(survminer)
 library(eha)
